@@ -16,6 +16,21 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 (async () => {
   check('home visible at load', !$('view-home').classList.contains('hidden'));
 
+  // ---- solo mode ----
+  $('tile-solo').click();
+  check('solo: game opens', !$('view-game').classList.contains('hidden'));
+  check('solo: single lane on the rail', doc.querySelectorAll('#g-rail .lane-row').length === 1);
+  let soloSafety = 0, soloPlacements = 0;
+  while (!$('d-score').open && soloSafety++ < 25) {
+    const b = doc.querySelector('#g-rows .row-btn:not([disabled])');
+    if (!b) break; b.click(); soloPlacements++;
+  }
+  check('solo: round completes in 12 placements', $('d-score').open && soloPlacements === 12);
+  $('ds-continue').click();
+  check('solo: next round or finish flows on', $('d-over').open || $('g-round').textContent === 'Round 2');
+  if ($('d-over').open) $('do-home').click(); else $('btn-quit').click();
+  check('solo: back home', !$('view-home').classList.contains('hidden'));
+
   // pick hard difficulty via pill (must NOT start a match)
   doc.querySelectorAll('#diff-picker .pill')[2].click();
   check('pill click does not start match', !$('view-game').classList.contains('hidden') === false);
@@ -79,9 +94,11 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   check('card hidden is NOT in effect for active player', doc.querySelector('#g-draw-card .card.back') === null);
   $('btn-quit').click();
 
-  // online configured → lobby
+  // online configured → lobby with public/private choice
   $('tile-online').click();
   check('online lobby shown (Firebase configured)', !$('o-lobby').classList.contains('hidden'));
+  check('lobby has visibility pills', doc.querySelectorAll('.vis-row .pill').length === 2);
+  check('lobby has an open-tables section', $('o-public') !== null);
   $('o-back').click();
   check('back returns home', !$('view-home').classList.contains('hidden'));
 
