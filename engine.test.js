@@ -1,0 +1,61 @@
+const E = require('./engine.js');
+let fails = 0;
+const eq = (name, a, b) => {
+  const ok = JSON.stringify(a) === JSON.stringify(b);
+  console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ` — expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`}`);
+  if (!ok) fails++;
+};
+const c = (rank, suit) => ({ rank, suit });
+
+// Same vectors as the app's TS suite
+eq('perfect 29', E.scoreHand([c(5,'H'),c(5,'D'),c(5,'C'),c(11,'S')], c(5,'S')).total, 29);
+eq('zero hand', E.scoreHand([c(1,'H'),c(3,'D'),c(7,'C'),c(13,'S')], c(10,'H')).total, 0);
+eq('double run + fifteens', E.scoreHand([c(4,'H'),c(4,'D'),c(5,'C'),c(6,'S')], c(13,'H')).total, 14);
+eq('hand flush 4', E.scoreHand([c(2,'H'),c(4,'H'),c(6,'H'),c(9,'H')], c(13,'S')).total, 8);
+eq('crib flush needs 5', E.scoreHand([c(2,'H'),c(4,'H'),c(6,'H'),c(9,'H')], c(13,'S'), true).total, 4);
+eq('nobs', E.scoreHand([c(11,'H'),c(2,'D'),c(8,'C'),c(13,'S')], c(7,'H')).nobs, 1);
+const st = c(5,'S');
+eq('blog hand 1', E.scoreHand([c(1,'H'),c(2,'D'),c(3,'C'),c(13,'H')], st).total, 7);
+eq('blog hand 2', E.scoreHand([c(1,'C'),c(2,'H'),c(8,'C'),c(12,'H')], st).total, 4);
+eq('blog hand 3', E.scoreHand([c(7,'H'),c(7,'D'),c(9,'C'),c(9,'H')], st).total, 4);
+eq('blog hand 4', E.scoreHand([c(1,'D'),c(4,'H'),c(6,'C'),c(12,'D')], st).total, 9);
+eq('blog crib', E.scoreHand([c(6,'H'),c(9,'D'),c(10,'C'),c(10,'H')], st, true).total, 8);
+
+// New deal rules
+let r = E.newRound(12345);
+eq('auto-deal: hands start with 1', r.rows.slice(0,4).every(x => x.length === 1), true);
+eq('auto-deal: crib starts with 1', r.rows[4].length, 1);
+eq('cannot place into crib', E.canPlace(r, 4), false);
+let ct = E.placeCard(r, 0);
+eq('hand cannot exceed crib+1', E.canPlace(ct, 0), false);
+ct = E.placeCard(ct, 1); ct = E.placeCard(ct, 2); ct = E.placeCard(ct, 3);
+eq('crib auto-deals when hands catch up', ct.rows[4].length, 2);
+// Cross-check vs TS engine: auto-dealt rows from seed 12345
+console.log('INFO seed 12345 auto-deal:', r.rows.map(x => x.map(c => c.rank + c.suit).join('')).join('|'), 'current:', r.current.rank + r.current.suit);
+let placements = 0;
+while (!r.complete) {
+  let moved = false;
+  for (let i = 0; i < 4; i++) { const b = r; r = E.placeCard(r, i); if (r !== b) { moved = true; break; } }
+  if (!moved) throw new Error('stuck');
+  placements++;
+}
+eq('exactly 12 player placements', placements, 12);
+const res = E.scoreRound(r);
+eq('net = total - 29', res.net, res.handTotal - E.PAR);
+eq('deck remainder', r.deck.length, 31);
+
+let m = E.newMatch(0);
+m = E.applyRoundNet(m, 30);
+eq('equal rounds rule', m.outcome.kind, 'playing');
+m = E.applyRoundNet(m, 35);
+eq('higher total wins', m.outcome, { kind: 'win', player: 1 });
+let m2 = E.newMatch(0); m2 = E.applyRoundNet(m2, 29); m2 = E.applyRoundNet(m2, 29);
+eq('tie', m2.outcome.kind, 'tie');
+
+for (const d of ['easy','medium','hard']) {
+  let ar = E.newRound(999), g = 0;
+  while (!ar.complete && g++ < 20) ar = E.placeCard(ar, E.aiChooseRow(ar, d));
+  eq(`AI ${d} legal round`, ar.complete && ar.rows.every(x => x.length === 4), true);
+}
+console.log(fails === 0 ? 'ALL TESTS PASSED' : fails + ' FAILURES');
+process.exit(fails ? 1 : 0);

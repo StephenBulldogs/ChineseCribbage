@@ -178,7 +178,7 @@
       </button>
       <button class="tile" id="tile-online">
         <h2>Online duel</h2>
-        <p>Share a five-letter room code. You and your opponent get the identical deal every round — pure placement skill. Works cross-play with the mobile app.</p>
+        <p>Share a five-letter room code and take turns playing rounds — a fresh shuffle for every player, just like across the table. Works cross-play with the mobile app.</p>
         <span class="tag">NEEDS A CONNECTION</span>
       </button>
     </div>
@@ -194,9 +194,9 @@
     </section>
 
     <footer>
-      Offline modes run entirely in your browser — no account, no server. Online duels sync through your own free
-      Firebase project: paste its config into the <code>FIREBASE_CONFIG</code> block at the top of this file's script
-      (full walkthrough in the README). The room protocol matches the mobile app, so phone and browser players can duel each other.
+      Offline modes run entirely in your browser — no account, no server. Online duels are turn-based with a fresh
+      shuffle per player, synced through Firebase. The room protocol matches the mobile app, so phone and browser
+      players can duel each other.
     </footer>
   </main>
 
@@ -218,7 +218,7 @@
   <main id="view-online" class="hidden">
     <div class="online-box" id="o-lobby">
       <h2>Online duel</h2>
-      <p>You and your opponent get the identical deal each round — same cards, same starter. The only difference is where you put them.</p>
+      <p>Turn-based, like playing across the table: you play your round with your own fresh shuffle while your opponent waits, then they play theirs.</p>
       <div class="field"><input type="text" id="o-name" maxlength="16" placeholder="Your name"></div>
       <button class="btn btn-primary" id="o-create" style="width:100%">Create a room</button>
       <div class="join-row" style="margin-top:12px">
@@ -519,14 +519,13 @@ if (typeof window !== 'undefined') window.CCEngine = CCEngine;
    Paste your Firebase web config below to enable online duels.
    ===================================================================== */
 const FIREBASE_CONFIG = {
-apiKey: "AIzaSyC6dr651hs5yROMh_PldkVkn7jITizpjS8",
-authDomain: "chinese-cribbage.firebaseapp.com",
-databaseURL: "https://chinese-cribbage-default-rtdb.firebaseio.com",
-projectId: "chinese-cribbage",
-storageBucket: "chinese-cribbage.firebasestorage.app",
-messagingSenderId: "726195341835",
-appId: "1:726195341835:web:c8a2f712016b2f24c2150e",
-measurementId: "G-TE9J234F73"
+  apiKey: 'AIzaSyC6dr651hs5yROMh_PldkVkn7jITizpjS8',
+  authDomain: 'chinese-cribbage.firebaseapp.com',
+  databaseURL: 'https://chinese-cribbage-default-rtdb.firebaseio.com',
+  projectId: 'chinese-cribbage',
+  storageBucket: 'chinese-cribbage.firebasestorage.app',
+  messagingSenderId: '726195341835',
+  appId: '1:726195341835:web:c8a2f712016b2f24c2150e'
 };
 const firebaseConfigured = () => FIREBASE_CONFIG.databaseURL.length > 0;
 
@@ -724,8 +723,7 @@ async function oCreate(){
     await db.ref('rooms/'+code).set({
       createdAt:Date.now(),
       players:{p0:{name,joined:true}},
-      seeds:{0:E.randomSeed()},
-      rounds:{}, currentRound:0, totals:{t0:0,t1:0}, status:'waiting'
+      rounds:{}, currentRound:0, turn:0, totals:{t0:0,t1:0}, status:'waiting'
     });
     S.code=code; S.seat=0; S.startedRound=-1;
     $('o-room-code').textContent=code; $('o-wait-title').textContent='Room '+code;
@@ -761,20 +759,20 @@ function onRoomUpdate(){
   if(!room){ oShow('lobby'); return oError('The room was closed.'); }
   if(room.status==='waiting') return oShow('wait');
 
-  // Start the local round when a new shared seed appears.
+  // Start a local round when it's my turn — with my own fresh shuffle.
   const i=room.currentRound;
-  if(room.status==='playing' && S.startedRound!==i && room.seeds && room.seeds[i]!==undefined){
+  if(room.status==='playing' && S.startedRound!==i && room.turn===S.seat){
     S.startedRound=i;
-    S.oRound=E.newRound(room.seeds[i]);
+    S.oRound=E.newRound(E.randomSeed());
   }
-  // Host advances when both nets are in.
+  // Host advances when both nets for this round are in (rounds always equal).
   if(S.seat===0 && room.status==='playing'){
     const entry=(room.rounds||{})[i];
     if(entry && entry.net0!==undefined && entry.net1!==undefined){
       const t0=room.totals.t0+entry.net0, t1=room.totals.t1+entry.net1;
       const updates={ totals:{t0,t1} };
       if (t0>=E.TARGET||t1>=E.TARGET){ updates.status='done'; updates.result=t0>t1?'p0':t1>t0?'p1':'tie'; }
-      else { updates.currentRound=i+1; updates['seeds/'+(i+1)]=E.randomSeed(); }
+      else { updates.currentRound=i+1; updates.turn=0; }
       fdb.ref('rooms/'+S.code).update(updates);
     }
   }
@@ -800,18 +798,19 @@ function renderOnline(){
 
   const entry=(room.rounds||{})[room.currentRound]||{};
   const mySubmitted=entry['net'+S.seat]!==undefined;
+  const myTurn=room.turn===S.seat && !mySubmitted;
   const r=S.oRound;
-  if(mySubmitted||!r){
+  if(!myTurn||!r){
     $('o-play').innerHTML='';
     $('o-waiting').classList.remove('hidden');
-    $('o-waiting-text').textContent=`Waiting for ${theirName} to finish the deal…`;
+    $('o-waiting-text').textContent=`${theirName} is playing their round…`;
     return;
   }
   $('o-waiting').classList.add('hidden');
   const rowScores=r.complete?E.scoreRound(r).rowScores:null;
   const head = r.complete
     ? `<div class="draw"><div><div class="label">Starter</div><div class="sub">Counts in all five hands.</div></div>${cardHTML(r.starter,'lg',false,true)}</div>`
-    : `<div class="draw"><div><div class="label">Your card</div><div class="sub">${esc(theirName)} has the same deal. Place it well — tap a hand or press 1–4. The crib deals itself.</div></div>${cardHTML(r.current,'lg',false,true)}</div>`;
+    : `<div class="draw"><div><div class="label">Your card</div><div class="sub">Your shuffle, your round — tap a hand or press 1–4. The crib deals itself.</div></div>${cardHTML(r.current,'lg',false,true)}</div>`;
   const submit = r.complete
     ? `<button class="btn btn-primary" id="o-submit" style="width:100%;margin-top:6px">Submit ${E.scoreRound(r).net>=0?'+':''}${E.scoreRound(r).net}</button>` : '';
   $('o-play').innerHTML=head+rowsHTML(r,(i)=>E.canPlace(r,i),rowScores)+submit;
@@ -820,7 +819,10 @@ function renderOnline(){
   const sb=$('o-submit');
   if(sb) sb.addEventListener('click',()=>{
     const net=E.scoreRound(S.oRound).net;
-    fdb.ref(`rooms/${S.code}/rounds/${room.currentRound}`).update({['net'+S.seat]:net});
+    fdb.ref('rooms/'+S.code).update({
+      ['rounds/'+room.currentRound+'/net'+S.seat]:net,
+      turn: S.seat===0?1:0
+    });
   });
 }
 
