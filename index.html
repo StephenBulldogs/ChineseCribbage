@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chinese Cribbage — five hands, one starter, par 29</title>
+<style>
+  :root{
+    --lacquer:#2B1714; --lacquer-deep:#1F100E; --lacquer-light:#41221C; --lacquer-edge:#5A322A;
+    --brass:#C9A227; --brass-dim:#8A6F1F; --jade:#3E8E7E;
+    --cream:#F3E9D7; --cream-dim:#C9BBA4; --ink-black:#22201C; --ink-red:#B5402F;
+    --display:Georgia,'Times New Roman',serif; --body:system-ui,-apple-system,'Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--lacquer);color:var(--cream);font-family:var(--body);
+    background-image:radial-gradient(ellipse at 50% -10%, #41221C66, transparent 60%)}
+  button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+  button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+  .wrap{max-width:880px;margin:0 auto;padding:24px 20px 64px}
+
+  /* ---------- header ---------- */
+  header{display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding:8px 0 28px}
+  .wordmark{font-family:var(--display);font-size:22px;letter-spacing:.5px}
+  .wordmark span{color:var(--brass)}
+  .kicker{color:var(--brass);font-size:11px;font-weight:700;letter-spacing:2.5px}
+
+  /* ---------- home ---------- */
+  .hero h1{font-family:var(--display);font-size:clamp(40px,7vw,64px);line-height:1.05;margin:6px 0 10px}
+  .hero p{color:var(--cream-dim);max-width:52ch;line-height:1.6}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-top:32px}
+  .tile{background:var(--lacquer-light);border:1px solid var(--lacquer-edge);border-radius:14px;
+    padding:20px;text-align:left;transition:border-color .15s, transform .15s}
+  .tile:hover{border-color:var(--brass);transform:translateY(-2px)}
+  .tile h2{font-family:var(--display);font-size:21px;margin-bottom:4px}
+  .tile p{color:var(--cream-dim);font-size:13px;line-height:1.5}
+  .tile .tag{display:inline-block;margin-top:10px;font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--brass)}
+  .diff{display:flex;gap:8px;margin-top:12px}
+  .pill{padding:5px 14px;border-radius:999px;border:1px solid var(--lacquer-edge);font-size:12px;
+    font-weight:700;color:var(--cream-dim);text-transform:capitalize}
+  .pill[aria-pressed="true"]{background:var(--brass);border-color:var(--brass);color:var(--lacquer-deep)}
+  .rules{margin-top:56px;border-top:1px solid var(--lacquer-edge);padding-top:32px;
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:24px}
+  .rules h3{font-family:var(--display);font-size:17px;color:var(--brass);margin-bottom:6px}
+  .rules p{color:var(--cream-dim);font-size:13.5px;line-height:1.6}
+
+  /* ---------- shared controls ---------- */
+  .btn{display:inline-block;padding:11px 22px;border-radius:999px;font-weight:700;font-size:14px;letter-spacing:.3px}
+  .btn-primary{background:var(--brass);color:var(--lacquer-deep)}
+  .btn-primary:hover{filter:brightness(1.07)}
+  .btn-ghost{border:1px solid var(--lacquer-edge);color:var(--cream)}
+  .btn-ghost:hover{border-color:var(--brass)}
+  .btn:disabled{opacity:.4;cursor:default}
+  input[type=text]{background:var(--lacquer-deep);border:1px solid var(--lacquer-edge);border-radius:10px;
+    color:var(--cream);padding:11px 14px;font-size:15px;width:100%}
+  input[type=text]::placeholder{color:var(--cream-dim)}
+
+  /* ---------- score rail ---------- */
+  .rail{margin:4px 0 20px}
+  .lane-row{display:grid;grid-template-columns:90px 1fr 44px;align-items:center;gap:10px;margin-bottom:10px}
+  .lane-name{font-size:12px;font-weight:600;color:var(--cream-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lane-name.active{color:var(--cream)}
+  .lane{position:relative;height:14px;border-radius:7px;background:var(--lacquer-deep);border:1px solid var(--lacquer-edge)}
+  .zero-zone{position:absolute;left:0;top:0;bottom:0;background:#00000055;border-radius:7px 0 0 7px}
+  .notch{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--brass)}
+  .peg{position:absolute;top:50%;width:18px;height:18px;border-radius:50%;transform:translate(-50%,-50%);
+    border:2px solid var(--lacquer-deep);transition:left .6s cubic-bezier(.2,.8,.3,1)}
+  .peg.active{border-color:var(--cream)}
+  .lane-total{font-family:var(--display);font-size:18px;text-align:right}
+  .lane-total.neg{color:var(--ink-red)}
+  .rail-scale{display:flex;justify-content:space-between;padding:0 44px 0 100px;font-size:10px;color:var(--cream-dim)}
+  .rail-scale b{color:var(--brass)}
+
+  /* ---------- game board ---------- */
+  .board-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+  .board-head h2{font-family:var(--display);font-size:24px}
+  .draw{display:flex;justify-content:space-between;align-items:center;gap:16px;background:var(--lacquer-deep);
+    border:1px solid var(--lacquer-edge);border-radius:12px;padding:16px;margin-bottom:16px}
+  .draw .label{font-family:var(--display);font-size:18px}
+  .draw .sub{color:var(--cream-dim);font-size:12.5px;margin-top:4px;max-width:42ch;line-height:1.5}
+
+  .card{display:inline-flex;align-items:center;justify-content:center;position:relative;
+    background:var(--cream);border:1px solid #00000022;border-radius:8px;user-select:none}
+  .card.lg{width:78px;height:110px;font-size:26px}
+  .card.sm{width:44px;height:62px;font-size:16px}
+  .card .pip{font-weight:600}
+  .card .corner{position:absolute;top:3px;left:5px;font-size:.6em;font-weight:700}
+  .card.red{color:var(--ink-red)} .card.black{color:var(--ink-black)}
+  .card.back{background:var(--brass-dim)}
+  .card.back::after{content:"";position:absolute;inset:4px;border:2px solid #F3E9D755;border-radius:5px}
+  .slot{display:inline-block;border:1.5px dashed var(--lacquer-edge);border-radius:8px;background:#1F100E66}
+  .slot.sm{width:44px;height:62px}
+  .deal-in{animation:dealIn .22s cubic-bezier(.2,.8,.3,1)}
+  @keyframes dealIn{from{transform:translateY(-8px) scale(.92);opacity:0}to{transform:none;opacity:1}}
+  @media (prefers-reduced-motion: reduce){.deal-in{animation:none}.peg{transition:none}}
+
+  .row-btn{display:grid;grid-template-columns:86px 1fr;align-items:center;gap:12px;width:100%;
+    background:var(--lacquer-light);border:1px solid transparent;border-radius:12px;padding:10px 12px;margin-bottom:10px;text-align:left}
+  .row-btn.crib{border-color:var(--brass-dim)}
+  .row-btn.placeable{border-color:var(--brass)}
+  .row-btn.placeable:hover{background:var(--lacquer-edge)}
+  .row-label{font-size:11px;font-weight:700;letter-spacing:.8px;color:var(--cream-dim);text-transform:uppercase}
+  .row-label .key{display:inline-block;margin-left:6px;padding:0 5px;border:1px solid var(--lacquer-edge);
+    border-radius:4px;font-size:10px;color:var(--cream-dim)}
+  .row-score{font-family:var(--display);font-size:22px;margin-top:2px}
+  .row-score.zero{color:var(--cream-dim)}
+  .row-cards{display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap}
+  .crib .row-label{color:var(--brass)}
+
+  /* ---------- dialogs ---------- */
+  dialog{background:var(--lacquer-light);border:1px solid var(--lacquer-edge);border-radius:16px;
+    color:var(--cream);padding:32px;max-width:380px;width:calc(100% - 48px)}
+  dialog::backdrop{background:#000A}
+  .d-eyebrow{color:var(--brass);font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}
+  .d-big{font-family:var(--display);font-size:34px;margin:10px 0 6px}
+  .d-big .dim{color:var(--cream-dim);font-size:22px}
+  .d-big .pos{color:var(--brass)} .d-big .neg{color:var(--ink-red)}
+  .d-sub{color:var(--cream-dim);font-size:14px;line-height:1.5}
+  dialog .btn{margin-top:22px;width:100%}
+  dialog .btn + .btn{margin-top:10px}
+
+  /* ---------- online ---------- */
+  .online-box{max-width:420px;margin:24px auto 0}
+  .online-box h2{font-family:var(--display);font-size:28px;margin-bottom:10px}
+  .online-box p{color:var(--cream-dim);font-size:14px;line-height:1.6;margin-bottom:16px}
+  .field{margin-bottom:12px}
+  .join-row{display:flex;gap:10px}
+  .room-code{font-family:var(--display);font-size:54px;letter-spacing:10px;color:var(--brass);text-align:center;margin:24px 0}
+  .err{color:var(--ink-red);font-size:13px;margin-top:10px}
+  .spin{width:22px;height:22px;border:3px solid var(--lacquer-edge);border-top-color:var(--brass);
+    border-radius:50%;margin:24px auto;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .wait-center{text-align:center;padding:48px 0;color:var(--cream-dim)}
+
+  .hidden{display:none !important}
+  footer{margin-top:64px;color:var(--cream-dim);font-size:12px;border-top:1px solid var(--lacquer-edge);padding-top:20px;line-height:1.7}
+  footer code{color:var(--cream);background:var(--lacquer-deep);padding:1px 6px;border-radius:4px}
+
+  @media (max-width:560px){
+    .lane-row{grid-template-columns:64px 1fr 38px}
+    .rail-scale{padding-left:74px;padding-right:38px}
+    .row-btn{grid-template-columns:64px 1fr}
+    .card.lg{width:64px;height:90px;font-size:22px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="wordmark">Chinese <span>Cribbage</span></div>
+    <button class="btn-ghost btn hidden" id="btn-quit">Quit match</button>
+  </header>
+
+  <!-- ============ HOME ============ -->
+  <main id="view-home">
+    <section class="hero">
+      <div class="kicker">FIVE HANDS · ONE STARTER · PAR 29</div>
+      <h1>Twenty cards.<br>Place them well.</h1>
+      <p>Place your cards into four hands while the crib deals itself face down, flip the starter, and count every row like a cribbage hand. Beat par and you peg up the rail. Miss it and you peg backwards. First past 29 —
+         after equal rounds — takes the match.</p>
+    </section>
+
+    <div class="tiles">
+      <button class="tile" id="tile-ai">
+        <h2>Versus AI</h2>
+        <p>Race the house opponent to 29. Three difficulties, from a careless Deckhand to a Monte-Carlo Captain.</p>
+        <div class="diff" id="diff-picker" role="group" aria-label="AI difficulty">
+          <span class="pill" role="button" tabindex="0" data-d="easy" aria-pressed="false">easy</span>
+          <span class="pill" role="button" tabindex="0" data-d="medium" aria-pressed="true">medium</span>
+          <span class="pill" role="button" tabindex="0" data-d="hard" aria-pressed="false">hard</span>
+        </div>
+        <span class="tag">PLAYS OFFLINE</span>
+      </button>
+      <button class="tile" id="tile-pass">
+        <h2>Pass &amp; play</h2>
+        <p>Two players, one screen. Hand the device over between rounds — the score sheet keeps everyone honest.</p>
+        <span class="tag">PLAYS OFFLINE</span>
+      </button>
+      <button class="tile" id="tile-online">
+        <h2>Online duel</h2>
+        <p>Share a five-letter room code. You and your opponent get the identical deal every round — pure placement skill. Works cross-play with the mobile app.</p>
+        <span class="tag">NEEDS A CONNECTION</span>
+      </button>
+    </div>
+
+    <section class="rules">
+      <div><h3>The deal</h3><p>The first five cards deal themselves — one to each hand and one, face down, to the crib. After that, you place each drawn card into a hand of your choice. Never the crib, and once a card is placed, it stays.</p></div>
+      <div><h3>The crib feeds itself</h3><p>No hand may hold more than one card beyond the crib. Each time all four hands catch up, the next card deals itself, face down, into the crib — and you only see it when it's time to count.</p></div>
+      <div><h3>The starter</h3><p>When the rows are full, a starter is flipped. It counts as the fifth card in every row, just as in regular cribbage.</p></div>
+      <div><h3>Scoring</h3><p>Fifteens score 2, pairs 2, runs their length, four of a suit a flush (the crib needs all five), and a jack matching the starter suit is a nob.</p></div>
+      <div><h3>Par is 29</h3><p>Total all five rows, subtract 29. Over par pegs you up; under par pegs you down — totals can go negative.</p></div>
+      <div><h3>Winning</h3><p>The match ends only when both players have played equal rounds and someone has 29 or more. If your opponent gets there first, you still get your answer round. Highest total wins; equal totals are a tie.</p></div>
+      <div><h3>Tips</h3><p>Fives are gold — every face card pairs with them for fifteen. Keep one row loose early as a dumping ground, and remember the crib scores too.</p></div>
+    </section>
+
+    <footer>
+      Offline modes run entirely in your browser — no account, no server. Online duels sync through your own free
+      Firebase project: paste its config into the <code>FIREBASE_CONFIG</code> block at the top of this file's script
+      (full walkthrough in the README). The room protocol matches the mobile app, so phone and browser players can duel each other.
+    </footer>
+  </main>
+
+  <!-- ============ GAME ============ -->
+  <main id="view-game" class="hidden">
+    <div class="board-head"><h2 id="g-round">Round 1</h2></div>
+    <div class="rail" id="g-rail"></div>
+    <div class="draw">
+      <div>
+        <div class="label" id="g-draw-label">You to place</div>
+        <div class="sub" id="g-draw-sub">Tap a hand — or press 1–4 — to place this card. The crib deals itself.</div>
+      </div>
+      <div id="g-draw-card"></div>
+    </div>
+    <div id="g-rows"></div>
+  </main>
+
+  <!-- ============ ONLINE ============ -->
+  <main id="view-online" class="hidden">
+    <div class="online-box" id="o-lobby">
+      <h2>Online duel</h2>
+      <p>You and your opponent get the identical deal each round — same cards, same starter. The only difference is where you put them.</p>
+      <div class="field"><input type="text" id="o-name" maxlength="16" placeholder="Your name"></div>
+      <button class="btn btn-primary" id="o-create" style="width:100%">Create a room</button>
+      <div class="join-row" style="margin-top:12px">
+        <input type="text" id="o-code" maxlength="5" placeholder="Room code" style="text-transform:uppercase">
+        <button class="btn btn-ghost" id="o-join">Join</button>
+      </div>
+      <div class="err hidden" id="o-err"></div>
+      <button class="btn btn-ghost" id="o-back" style="width:100%;margin-top:20px">Back</button>
+    </div>
+    <div class="online-box hidden" id="o-setup">
+      <h2>Online play needs a one-time setup</h2>
+      <p>Online duels sync through Firebase. Create a free project at console.firebase.google.com, enable a Realtime
+         Database, and paste the web config into the <strong>FIREBASE_CONFIG</strong> block at the top of this file's script.
+         The README walks through it in about five minutes. Versus AI and pass-and-play work right now, offline.</p>
+      <button class="btn btn-ghost" id="o-setup-back" style="width:100%">Back</button>
+    </div>
+    <div class="online-box hidden" id="o-wait">
+      <h2 id="o-wait-title">Room</h2>
+      <p>Share this code with your opponent — on the website or the mobile app. The duel starts the moment they join.</p>
+      <div class="room-code" id="o-room-code"></div>
+      <div class="spin"></div>
+      <button class="btn btn-ghost" id="o-cancel" style="width:100%">Cancel</button>
+    </div>
+    <div id="o-game" class="hidden">
+      <div class="board-head"><h2 id="o-round">Round 1</h2><button class="btn btn-ghost" id="o-leave">Leave</button></div>
+      <div class="rail" id="o-rail"></div>
+      <div id="o-play"></div>
+      <div class="wait-center hidden" id="o-waiting"><div class="spin"></div><div id="o-waiting-text">Waiting for your opponent…</div></div>
+    </div>
+  </main>
+
+  <!-- ============ DIALOGS ============ -->
+  <dialog id="d-score">
+    <div class="d-eyebrow" id="ds-eyebrow">Round complete</div>
+    <div class="d-big" id="ds-line"></div>
+    <div class="d-sub" id="ds-sub"></div>
+    <button class="btn btn-primary" id="ds-continue">Continue</button>
+  </dialog>
+  <dialog id="d-handoff">
+    <div class="d-eyebrow">Pass the device</div>
+    <div class="d-big" id="dh-name"></div>
+    <div class="d-sub">Your round. No peeking by the other player.</div>
+    <button class="btn btn-primary" id="dh-ready">I'm ready</button>
+  </dialog>
+  <dialog id="d-over">
+    <div class="d-eyebrow">Match over</div>
+    <div class="d-big" id="do-title"></div>
+    <div class="d-sub" id="do-sub"></div>
+    <button class="btn btn-primary" id="do-rematch">Rematch</button>
+    <button class="btn btn-ghost" id="do-home">Home</button>
+  </dialog>
+</div>
+
+<script>
+// Chinese Cribbage engine — plain JS port of the app's tested TypeScript engine.
+// Kept dependency-free so it runs inline in the website and in Node for tests.
+
+const SUITS = ['S', 'H', 'D', 'C'];
+const SUIT_GLYPHS = { S: '\u2660', H: '\u2665', D: '\u2666', C: '\u2663' };
+const RANK_LABELS = { 1: 'A', 11: 'J', 12: 'Q', 13: 'K' };
+const PAR = 29;
+const TARGET = 29;
+const ROW_SIZE = 4;
+const CRIB_ROW = 4;
+
+const cardValue = (c) => Math.min(c.rank, 10);
+const cardId = (c) => `${c.rank}${c.suit}`;
+const rankLabel = (r) => RANK_LABELS[r] || String(r);
+
+function freshDeck() {
+  const deck = [];
+  for (const suit of SUITS) for (let rank = 1; rank <= 13; rank++) deck.push({ rank, suit });
+  return deck;
+}
+
+// Mulberry32 — deterministic deals from a shared seed (online fairness).
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function shuffle(deck, rand) {
+  const d = deck.slice();
+  for (let i = d.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [d[i], d[j]] = [d[j], d[i]];
+  }
+  return d;
+}
+
+const randomSeed = () => Math.floor(Math.random() * 0xffffffff);
+
+// --- Standard cribbage show scoring: 4-card hand + starter ---
+function scoreHand(hand, starter, isCrib = false) {
+  const all = hand.concat([starter]);
+  let fifteens = 0;
+  for (let mask = 1; mask < 1 << all.length; mask++) {
+    let sum = 0;
+    for (let i = 0; i < all.length; i++) if (mask & (1 << i)) sum += cardValue(all[i]);
+    if (sum === 15) fifteens += 2;
+  }
+  let pairs = 0;
+  for (let i = 0; i < all.length; i++)
+    for (let j = i + 1; j < all.length; j++) if (all[i].rank === all[j].rank) pairs += 2;
+
+  const counts = new Map();
+  for (const c of all) counts.set(c.rank, (counts.get(c.rank) || 0) + 1);
+  const distinct = [...counts.keys()].sort((a, b) => a - b);
+  let runs = 0, i = 0;
+  while (i < distinct.length) {
+    let j = i;
+    while (j + 1 < distinct.length && distinct[j + 1] === distinct[j] + 1) j++;
+    const len = j - i + 1;
+    if (len >= 3) {
+      let mult = 1;
+      for (let k = i; k <= j; k++) mult *= counts.get(distinct[k]);
+      runs += len * mult;
+    }
+    i = j + 1;
+  }
+
+  let flush = 0;
+  const suit = hand[0].suit;
+  if (hand.every((c) => c.suit === suit)) {
+    if (starter.suit === suit) flush = 5;
+    else if (!isCrib) flush = 4;
+  }
+  const nobs = hand.some((c) => c.rank === 11 && c.suit === starter.suit) ? 1 : 0;
+  const total = fifteens + pairs + runs + flush + nobs;
+  return { fifteens, pairs, runs, flush, nobs, total };
+}
+
+// --- Round ---
+// The first five cards deal themselves: one to each hand, one FACE DOWN to
+// the crib. The player places only into hands; no hand may hold more than
+// (crib size + 1) cards, and whenever every hand reaches that cap the next
+// card deals itself into the crib. Crib stays hidden until the count.
+const maxHandSize = (s) => Math.min(s.rows[CRIB_ROW].length + 1, ROW_SIZE);
+
+function newRound(seed) {
+  const deck = shuffle(freshDeck(), mulberry32(seed));
+  const rows = [[], [], [], [], []];
+  for (let i = 0; i < CRIB_ROW; i++) rows[i].push(deck[i]);
+  rows[CRIB_ROW].push(deck[CRIB_ROW]);
+  return settle({ seed, deck: deck.slice(5), rows, current: null, starter: null, complete: false });
+}
+
+const canPlace = (s, r) =>
+  !s.complete && s.current !== null && r >= 0 && r < CRIB_ROW && s.rows[r].length < maxHandSize(s);
+
+function placeCard(s, r) {
+  if (!canPlace(s, r)) return s;
+  const rows = s.rows.map((row, i) => (i === r ? row.concat([s.current]) : row));
+  return settle({ ...s, rows, current: null });
+}
+
+function settle(s) {
+  const deck = s.deck.slice();
+  const rows = s.rows.map((r) => r.slice());
+  const cap = () => Math.min(rows[CRIB_ROW].length + 1, ROW_SIZE);
+  const atCap = () => rows.slice(0, CRIB_ROW).every((r) => r.length >= cap());
+  while (rows[CRIB_ROW].length < ROW_SIZE && atCap()) rows[CRIB_ROW].push(deck.shift());
+  const placed = rows.reduce((n, r) => n + r.length, 0);
+  if (placed >= 5 * ROW_SIZE) {
+    const [starter, ...rest] = deck;
+    return { ...s, rows, deck: rest, current: null, starter, complete: true };
+  }
+  const [current, ...rest] = deck;
+  return { ...s, rows, deck: rest, current, complete: false };
+}
+
+function scoreRound(s) {
+  const rowScores = s.rows.map((row, i) => scoreHand(row, s.starter, i === CRIB_ROW));
+  const handTotal = rowScores.reduce((n, x) => n + x.total, 0);
+  return { rowScores, handTotal, net: handTotal - PAR };
+}
+
+// --- Match: race to 29, equal rounds guaranteed, ties allowed ---
+function newMatch(firstPlayer = 0, seed) {
+  return {
+    totals: [0, 0],
+    roundsPlayed: [0, 0],
+    turn: firstPlayer,
+    roundSeed: seed == null ? randomSeed() : seed,
+    outcome: { kind: 'playing' },
+  };
+}
+
+function applyRoundNet(m, net, nextSeed) {
+  const totals = m.totals.slice();
+  const roundsPlayed = m.roundsPlayed.slice();
+  totals[m.turn] += net;
+  roundsPlayed[m.turn] += 1;
+  const even = roundsPlayed[0] === roundsPlayed[1];
+  const home = totals[0] >= TARGET || totals[1] >= TARGET;
+  let outcome = { kind: 'playing' };
+  if (even && home) {
+    if (totals[0] > totals[1]) outcome = { kind: 'win', player: 0 };
+    else if (totals[1] > totals[0]) outcome = { kind: 'win', player: 1 };
+    else outcome = { kind: 'tie' };
+  }
+  return { totals, roundsPlayed, turn: m.turn === 0 ? 1 : 0, roundSeed: nextSeed == null ? randomSeed() : nextSeed, outcome };
+}
+
+// --- AI ---
+function synergy(row, card) {
+  let s = 0;
+  for (const c of row) {
+    if (c.rank === card.rank) s += 2.4;
+    const gap = Math.abs(c.rank - card.rank);
+    if (gap === 1) s += 1.3; else if (gap === 2) s += 0.5;
+    if (cardValue(c) + cardValue(card) === 15) s += 1.6;
+    if (c.suit === card.suit) s += 0.25;
+  }
+  for (let i = 0; i < row.length; i++)
+    for (let j = i + 1; j < row.length; j++)
+      if (cardValue(row[i]) + cardValue(row[j]) + cardValue(card) === 15) s += 1.2;
+  if (cardValue(card) === 5) s += 0.4;
+  if (row.length === 0) s -= 0.3;
+  return s;
+}
+
+const legalRows = (s) => [0, 1, 2, 3].filter((i) => canPlace(s, i));
+
+function heuristicPick(s, noise) {
+  const card = s.current;
+  let best = null, bestScore = -Infinity;
+  for (const r of legalRows(s)) {
+    const score = synergy(s.rows[r], card) + (noise > 0 ? (Math.random() - 0.5) * noise : 0);
+    if (score > bestScore) { bestScore = score; best = r; }
+  }
+  return best;
+}
+
+// The AI may only know its hands and the current card — the crib is face
+// down, so its real cards stay in the unknown pool, same as for a human.
+function unseenCards(s) {
+  const seen = new Set();
+  for (let i = 0; i < CRIB_ROW; i++) for (const c of s.rows[i]) seen.add(cardId(c));
+  if (s.current) seen.add(cardId(s.current));
+  return freshDeck().filter((c) => !seen.has(cardId(c)));
+}
+
+function monteCarloPick(s, samples) {
+  const card = s.current;
+  const candidates = legalRows(s);
+  if (candidates.length === 1) return candidates[0];
+  const unseen = unseenCards(s);
+  let best = candidates[0], bestEv = -Infinity;
+  for (const r of candidates) {
+    // Crib simulated blind — its real cards are hidden from the AI.
+    const placedRows = s.rows.map((row, i) => (i === CRIB_ROW ? [] : i === r ? row.concat([card]) : row.slice()));
+    let total = 0;
+    for (let n = 0; n < samples; n++) {
+      const pool = unseen.slice();
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+      let cursor = 0;
+      const sim = placedRows.map((row) => row.slice());
+      for (const row of sim) while (row.length < ROW_SIZE) row.push(pool[cursor++]);
+      const starter = pool[cursor];
+      for (let i = 0; i < sim.length; i++) total += scoreHand(sim[i], starter, i === CRIB_ROW).total;
+    }
+    const ev = total / samples;
+    if (ev > bestEv) { bestEv = ev; best = r; }
+  }
+  return best;
+}
+
+function aiChooseRow(s, difficulty) {
+  if (difficulty === 'easy') return heuristicPick(s, 3.5);
+  if (difficulty === 'medium') return heuristicPick(s, 0);
+  return monteCarloPick(s, 60);
+}
+
+// Export for Node tests; in the browser these become globals via window.CCEngine.
+const CCEngine = {
+  SUIT_GLYPHS, PAR, TARGET, CRIB_ROW, ROW_SIZE,
+  cardValue, rankLabel, freshDeck, mulberry32, shuffle, randomSeed,
+  scoreHand, newRound, canPlace, placeCard, scoreRound, maxHandSize,
+  newMatch, applyRoundNet, aiChooseRow,
+};
+if (typeof module !== 'undefined') module.exports = CCEngine;
+if (typeof window !== 'undefined') window.CCEngine = CCEngine;
+
+</script>
+<script>
+/* =====================================================================
+   Online sync — Firebase Realtime Database, same room protocol as the
+   mobile app (rooms/{code}: players, seeds, rounds, totals, status).
+   Paste your Firebase web config below to enable online duels.
+   ===================================================================== */
+const FIREBASE_CONFIG = {
+  apiKey: '',
+  authDomain: '',
+  databaseURL: '',   // ← required, e.g. https://your-app-default-rtdb.firebaseio.com
+  projectId: '',
+  storageBucket: '',
+  messagingSenderId: '',
+  appId: ''
+};
+const firebaseConfigured = () => FIREBASE_CONFIG.databaseURL.length > 0;
+
+let fdb = null;
+async function loadFirebase() {
+  if (fdb) return fdb;
+  const load = (src) => new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = src; s.onload = res; s.onerror = () => rej(new Error('Could not load Firebase scripts.'));
+    document.head.appendChild(s);
+  });
+  const V = '10.12.0';
+  await load(`https://cdnjs.cloudflare.com/ajax/libs/firebase/${V}/firebase-app-compat.min.js`);
+  await load(`https://cdnjs.cloudflare.com/ajax/libs/firebase/${V}/firebase-database-compat.min.js`);
+  firebase.initializeApp(FIREBASE_CONFIG);
+  fdb = firebase.database();
+  return fdb;
+}
+
+const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const makeRoomCode = () => Array.from({length:5},()=>CODE_ALPHABET[Math.floor(Math.random()*CODE_ALPHABET.length)]).join('');
+</script>
+<script>
+/* =====================================================================
+   UI
+   ===================================================================== */
+const E = window.CCEngine;
+const $ = (id) => document.getElementById(id);
+const ROW_LABELS = ['Hand 1','Hand 2','Hand 3','Hand 4','Crib'];
+const AI_NAMES = { easy:'Deckhand', medium:'Navigator', hard:'Captain' };
+
+const S = {
+  view:'home', mode:'ai', difficulty:'medium',
+  players:[{name:'You',kind:'human'},{name:'Navigator',kind:'ai'}],
+  match:null, round:null, lastResult:null, aiTimer:null,
+  // online
+  code:null, seat:0, room:null, oRound:null, startedRound:-1, unwatch:null, myName:''
+};
+
+function show(view){
+  S.view = view;
+  for (const v of ['home','game','online']) $('view-'+v).classList.toggle('hidden', v!==view);
+  $('btn-quit').classList.toggle('hidden', view!=='game');
+  window.scrollTo(0,0);
+}
+
+/* ---------- shared renderers ---------- */
+function cardHTML(card, size, faceDown, animate){
+  if (faceDown || !card) return `<div class="card ${size} back ${animate?'deal-in':''}"></div>`;
+  const red = card.suit==='H'||card.suit==='D';
+  const txt = E.rankLabel(card.rank)+E.SUIT_GLYPHS[card.suit];
+  return `<div class="card ${size} ${red?'red':'black'} ${animate?'deal-in':''}">
+    <span class="corner">${txt}</span><span class="pip">${txt}</span></div>`;
+}
+function railHTML(totals, names, turn){
+  const MIN=-15, MAX=35;
+  const pct=(v)=>((Math.max(MIN,Math.min(MAX,v))-MIN)/(MAX-MIN))*100;
+  const lane=(p,color)=>`
+    <div class="lane-row">
+      <div class="lane-name ${turn===p?'active':''}">${esc(names[p])}</div>
+      <div class="lane">
+        <div class="zero-zone" style="width:${pct(0)}%"></div>
+        <div class="notch" style="left:${pct(E.TARGET)}%"></div>
+        <div class="peg ${turn===p?'active':''}" style="left:${pct(totals[p])}%;background:${color}"></div>
+      </div>
+      <div class="lane-total ${totals[p]<0?'neg':''}">${totals[p]}</div>
+    </div>`;
+  return lane(0,'var(--brass)')+lane(1,'var(--jade)')+
+    `<div class="rail-scale"><span>${MIN}</span><span>0</span><b>${E.TARGET} ★</b></div>`;
+}
+function rowsHTML(round, placeableFn, rowScores){
+  return round.rows.map((cards,i)=>{
+    const isCrib = i===E.CRIB_ROW;
+    const placeable = !isCrib && placeableFn(i);
+    const score = rowScores ? rowScores[i] : null;
+    const hideFaces = isCrib && !round.complete; // the crib stays hidden until the count
+    const badge = isCrib ? '<span class="key">auto</span>' : `<span class="key">${i+1}</span>`;
+    return `<button class="row-btn ${isCrib?'crib':''} ${placeable?'placeable':''}"
+      data-row="${i}" ${placeable?'':'disabled'} aria-label="${isCrib?'Crib — deals itself':'Place card in '+ROW_LABELS[i]}">
+      <div><div class="row-label">${ROW_LABELS[i]}${badge}</div>
+        ${score?`<div class="row-score ${score.total===0?'zero':''}">${score.total}</div>`:''}</div>
+      <div class="row-cards">
+        ${[0,1,2,3].map(k=>cards[k]?cardHTML(cards[k],'sm',hideFaces,k===cards.length-1):'<span class="slot sm"></span>').join('')}
+      </div></button>`;
+  }).join('');
+}
+const esc=(s)=>String(s).replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ====================================================================
+   LOCAL GAME (vs AI / pass & play)
+   ==================================================================== */
+function startMatch(mode){
+  S.mode = mode;
+  S.players = mode==='ai'
+    ? [{name:'You',kind:'human'},{name:AI_NAMES[S.difficulty],kind:'ai'}]
+    : [{name:'Player 1',kind:'human'},{name:'Player 2',kind:'human'}];
+  S.match = E.newMatch(0);
+  S.round = E.newRound(S.match.roundSeed);
+  S.lastResult = null;
+  show('game');
+  renderGame();
+}
+
+function renderGame(){
+  const m=S.match, r=S.round; if(!m) return;
+  const seat=m.turn;
+  $('g-round').textContent = `Round ${m.roundsPlayed[seat]+1}`;
+  $('g-rail').innerHTML = railHTML(m.totals,[S.players[0].name,S.players[1].name],seat);
+  if(!r){ $('g-rows').innerHTML=''; $('g-draw-card').innerHTML=''; return; }
+
+  const humanTurn = S.players[seat].kind==='human';
+  const rowScores = r.complete ? E.scoreRound(r).rowScores : null;
+  if (r.complete){
+    $('g-draw-label').textContent='Starter';
+    $('g-draw-sub').textContent='Counts in all five hands.';
+    $('g-draw-card').innerHTML=cardHTML(r.starter,'lg',false,true);
+  } else {
+    $('g-draw-label').textContent=`${S.players[seat].name} to place`;
+    $('g-draw-sub').textContent= humanTurn ? 'Tap a hand — or press 1–4 — to place this card. The crib deals itself.' : `${S.players[seat].name} is thinking…`;
+    $('g-draw-card').innerHTML=cardHTML(r.current,'lg',!humanTurn && S.mode==='pass',true);
+  }
+  $('g-rows').innerHTML = rowsHTML(r,(i)=>humanTurn && E.canPlace(r,i),rowScores);
+  for (const b of $('g-rows').querySelectorAll('.row-btn:not([disabled])'))
+    b.addEventListener('click',()=>place(+b.dataset.row));
+}
+
+function place(rowIndex){
+  const r=S.round; if(!r||!E.canPlace(r,rowIndex)) return;
+  S.round = E.placeCard(r,rowIndex);
+  renderGame();
+  if (S.round.complete) onRoundComplete();
+}
+
+function onRoundComplete(){
+  const result=E.scoreRound(S.round);
+  S.lastResult={result,seat:S.match.turn};
+  const {handTotal,net}=result;
+  $('ds-eyebrow').textContent=`${esc(S.players[S.match.turn].name)} · round complete`;
+  $('ds-line').innerHTML=`${handTotal} <span class="dim">− 29 =</span> <span class="${net>=0?'pos':'neg'}">${net>=0?'+':''}${net}</span>`;
+  $('ds-sub').textContent= net>=0 ? 'Pegging up the rail.' : 'Under par — pegging backwards.';
+  $('d-score').showModal();
+}
+
+function nextRound(){
+  $('d-score').close();
+  const adv=E.applyRoundNet(S.match,S.lastResult.result.net);
+  S.match=adv; S.lastResult=null;
+  if (adv.outcome.kind!=='playing'){ S.round=null; renderGame(); return showMatchOver(adv); }
+  S.round=E.newRound(adv.roundSeed);
+  renderGame();
+  const next=S.players[adv.turn];
+  if (S.mode==='pass' && next.kind==='human'){
+    $('dh-name').textContent=next.name;
+    $('d-handoff').showModal();
+  } else if (next.kind==='ai') runAiRound();
+}
+
+function runAiRound(){
+  clearInterval(S.aiTimer);
+  S.aiTimer=setInterval(()=>{
+    const r=S.round;
+    if(!r||r.complete){ clearInterval(S.aiTimer); return; }
+    S.round=E.placeCard(r,E.aiChooseRow(r,S.difficulty));
+    renderGame();
+    if (S.round.complete){ clearInterval(S.aiTimer); setTimeout(onRoundComplete,600); }
+  },300);
+}
+
+function showMatchOver(m){
+  const o=m.outcome;
+  $('do-title').textContent= o.kind==='tie' ? "It's a tie" : `${S.players[o.player].name} wins`;
+  $('do-sub').textContent=`${S.players[0].name} ${m.totals[0]} · ${S.players[1].name} ${m.totals[1]}`;
+  $('d-over').showModal();
+}
+
+/* ====================================================================
+   ONLINE DUEL — same-deal rounds, identical protocol to the app
+   ==================================================================== */
+function oShow(part){
+  for (const p of ['o-lobby','o-setup','o-wait','o-game']) $(p).classList.toggle('hidden',p!=='o-'+part);
+}
+async function openOnline(){
+  show('online');
+  if (!firebaseConfigured()) return oShow('setup');
+  oShow('lobby');
+}
+function oError(msg){ const e=$('o-err'); e.textContent=msg; e.classList.remove('hidden'); }
+
+async function oCreate(){
+  const name=$('o-name').value.trim(); if(!name) return oError('Enter your name first.');
+  S.myName=name;
+  try{
+    const db=await loadFirebase();
+    const code=makeRoomCode();
+    await db.ref('rooms/'+code).set({
+      createdAt:Date.now(),
+      players:{p0:{name,joined:true}},
+      seeds:{0:E.randomSeed()},
+      rounds:{}, currentRound:0, totals:{t0:0,t1:0}, status:'waiting'
+    });
+    S.code=code; S.seat=0; S.startedRound=-1;
+    $('o-room-code').textContent=code; $('o-wait-title').textContent='Room '+code;
+    oShow('wait'); watchRoom();
+  }catch(e){ oError(e.message); }
+}
+async function oJoin(){
+  const name=$('o-name').value.trim(); if(!name) return oError('Enter your name first.');
+  const code=$('o-code').value.trim().toUpperCase(); if(code.length!==5) return oError('Room codes are five letters.');
+  S.myName=name;
+  try{
+    const db=await loadFirebase();
+    const snap=await db.ref('rooms/'+code).get();
+    if(!snap.exists()) return oError('Room not found — check the code.');
+    if(snap.val().players && snap.val().players.p1 && snap.val().players.p1.joined) return oError('That room is already full.');
+    await db.ref('rooms/'+code).update({'players/p1':{name,joined:true},status:'playing'});
+    S.code=code; S.seat=1; S.startedRound=-1;
+    watchRoom();
+  }catch(e){ oError(e.message); }
+}
+function watchRoom(){
+  const r=fdb.ref('rooms/'+S.code);
+  const cb=r.on('value',(snap)=>{ S.room=snap.exists()?snap.val():null; onRoomUpdate(); });
+  S.unwatch=()=>r.off('value',cb);
+}
+function leaveRoom(){
+  if(S.unwatch) S.unwatch();
+  S.code=null; S.room=null; S.oRound=null; S.startedRound=-1;
+  show('home');
+}
+function onRoomUpdate(){
+  const room=S.room;
+  if(!room){ oShow('lobby'); return oError('The room was closed.'); }
+  if(room.status==='waiting') return oShow('wait');
+
+  // Start the local round when a new shared seed appears.
+  const i=room.currentRound;
+  if(room.status==='playing' && S.startedRound!==i && room.seeds && room.seeds[i]!==undefined){
+    S.startedRound=i;
+    S.oRound=E.newRound(room.seeds[i]);
+  }
+  // Host advances when both nets are in.
+  if(S.seat===0 && room.status==='playing'){
+    const entry=(room.rounds||{})[i];
+    if(entry && entry.net0!==undefined && entry.net1!==undefined){
+      const t0=room.totals.t0+entry.net0, t1=room.totals.t1+entry.net1;
+      const updates={ totals:{t0,t1} };
+      if (t0>=E.TARGET||t1>=E.TARGET){ updates.status='done'; updates.result=t0>t1?'p0':t1>t0?'p1':'tie'; }
+      else { updates.currentRound=i+1; updates['seeds/'+(i+1)]=E.randomSeed(); }
+      fdb.ref('rooms/'+S.code).update(updates);
+    }
+  }
+  renderOnline();
+}
+function renderOnline(){
+  const room=S.room; if(!room||room.status==='waiting') return;
+  oShow('game');
+  const myName=S.myName||'You';
+  const theirName=(S.seat===0?(room.players.p1&&room.players.p1.name):(room.players.p0&&room.players.p0.name))||'Opponent';
+  const totals=S.seat===0?[room.totals.t0,room.totals.t1]:[room.totals.t1,room.totals.t0];
+  $('o-round').textContent=`Round ${room.currentRound+1}`;
+  $('o-rail').innerHTML=railHTML(totals,[myName,theirName],0);
+
+  if(room.status==='done'){
+    const iWon=(room.result==='p0'&&S.seat===0)||(room.result==='p1'&&S.seat===1);
+    $('do-title').textContent= room.result==='tie'?"It's a tie": iWon?'You win the duel':`${theirName} takes it`;
+    $('do-sub').textContent=`${myName} ${totals[0]} · ${theirName} ${totals[1]}`;
+    $('o-play').innerHTML=''; $('o-waiting').classList.add('hidden');
+    if(!$('d-over').open) $('d-over').showModal();
+    return;
+  }
+
+  const entry=(room.rounds||{})[room.currentRound]||{};
+  const mySubmitted=entry['net'+S.seat]!==undefined;
+  const r=S.oRound;
+  if(mySubmitted||!r){
+    $('o-play').innerHTML='';
+    $('o-waiting').classList.remove('hidden');
+    $('o-waiting-text').textContent=`Waiting for ${theirName} to finish the deal…`;
+    return;
+  }
+  $('o-waiting').classList.add('hidden');
+  const rowScores=r.complete?E.scoreRound(r).rowScores:null;
+  const head = r.complete
+    ? `<div class="draw"><div><div class="label">Starter</div><div class="sub">Counts in all five hands.</div></div>${cardHTML(r.starter,'lg',false,true)}</div>`
+    : `<div class="draw"><div><div class="label">Your card</div><div class="sub">${esc(theirName)} has the same deal. Place it well — tap a hand or press 1–4. The crib deals itself.</div></div>${cardHTML(r.current,'lg',false,true)}</div>`;
+  const submit = r.complete
+    ? `<button class="btn btn-primary" id="o-submit" style="width:100%;margin-top:6px">Submit ${E.scoreRound(r).net>=0?'+':''}${E.scoreRound(r).net}</button>` : '';
+  $('o-play').innerHTML=head+rowsHTML(r,(i)=>E.canPlace(r,i),rowScores)+submit;
+  for (const b of $('o-play').querySelectorAll('.row-btn:not([disabled])'))
+    b.addEventListener('click',()=>{ S.oRound=E.placeCard(S.oRound,+b.dataset.row); renderOnline(); });
+  const sb=$('o-submit');
+  if(sb) sb.addEventListener('click',()=>{
+    const net=E.scoreRound(S.oRound).net;
+    fdb.ref(`rooms/${S.code}/rounds/${room.currentRound}`).update({['net'+S.seat]:net});
+  });
+}
+
+/* ====================================================================
+   WIRING
+   ==================================================================== */
+$('tile-ai').addEventListener('click',(e)=>{ if(e.target.closest('.pill')) return; startMatch('ai'); });
+$('tile-pass').addEventListener('click',()=>startMatch('pass'));
+$('tile-online').addEventListener('click',openOnline);
+for (const p of document.querySelectorAll('#diff-picker .pill')){
+  const pick=()=>{ S.difficulty=p.dataset.d;
+    document.querySelectorAll('#diff-picker .pill').forEach(x=>x.setAttribute('aria-pressed',String(x===p))); };
+  p.addEventListener('click',(e)=>{ e.stopPropagation(); pick(); });
+  p.addEventListener('keydown',(e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); e.stopPropagation(); pick(); }});
+}
+$('btn-quit').addEventListener('click',()=>{ clearInterval(S.aiTimer); S.match=null; S.round=null;
+  ['d-score','d-handoff','d-over'].forEach(d=>{ if($(d).open)$(d).close(); }); show('home'); });
+$('ds-continue').addEventListener('click',nextRound);
+$('dh-ready').addEventListener('click',()=>$('d-handoff').close());
+$('do-rematch').addEventListener('click',()=>{ $('d-over').close();
+  if(S.view==='online'){ leaveRoom(); openOnline(); } else startMatch(S.mode); });
+$('do-home').addEventListener('click',()=>{ $('d-over').close(); if(S.view==='online') leaveRoom(); else { S.match=null; show('home'); } });
+$('o-create').addEventListener('click',oCreate);
+$('o-join').addEventListener('click',oJoin);
+$('o-back').addEventListener('click',()=>show('home'));
+$('o-setup-back').addEventListener('click',()=>show('home'));
+$('o-cancel').addEventListener('click',leaveRoom);
+$('o-leave').addEventListener('click',leaveRoom);
+
+document.addEventListener('keydown',(e)=>{
+  if(e.key<'1'||e.key>'4'||e.repeat) return;
+  const i=+e.key-1;
+  if(S.view==='game' && S.round && S.players[S.match.turn].kind==='human'){ place(i); }
+  else if(S.view==='online' && S.oRound && !S.oRound.complete && E.canPlace(S.oRound,i)){
+    S.oRound=E.placeCard(S.oRound,i); renderOnline();
+  }
+});
+</script>
+</body>
+</html>
