@@ -151,6 +151,18 @@
     letter-spacing:1px;padding:2px 8px;border-radius:999px;margin-left:8px;animation:pulse 1.6s infinite}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
   .hint{color:var(--cream-dim);font-size:12px;margin-top:14px;line-height:1.6}
+  .size-row{display:flex;gap:8px;margin:2px 0 12px}
+  .seat-cfg{margin-bottom:12px}
+  .seat-cfg .row{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+  .seat-cfg .lbl{font-size:12px;color:var(--cream-dim);width:52px}
+  .roster{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}
+  .chip{display:inline-flex;align-items:center;gap:7px;background:var(--lacquer-deep);border:1px solid var(--lacquer-edge);
+    border-radius:999px;padding:6px 12px;font-size:12px;color:var(--cream)}
+  .chip .dot{width:8px;height:8px;border-radius:50%;background:#5BA35B}
+  .chip.off .dot{background:var(--ink-red);animation:pulse 1.6s infinite}
+  .chip.open{color:var(--cream-dim);border-style:dashed}
+  .chip .tag-ai{color:var(--brass);font-size:10px;font-weight:700;letter-spacing:1px}
+  .chip .held{color:var(--ink-red);font-size:11px}
 
   @media (max-width:560px){
     .lane-row{grid-template-columns:64px 1fr 38px}
@@ -199,7 +211,7 @@
       </button>
       <button class="tile" id="tile-online">
         <h2>Online duel</h2>
-        <p>Open a public table anyone can join, or a private room with a five-letter code. Take turns with fresh shuffles — and watch your opponent's placements live while you wait.</p>
+        <p>Tables for 2–4 players — fill empty seats with AI if you like. Public tables anyone can join, or private rooms by code. Watch every player's placements live while you wait your turn.</p>
         <span class="tag">NEEDS A CONNECTION</span>
       </button>
     </div>
@@ -242,6 +254,12 @@
       <h2>Online duel</h2>
       <p>Turn-based, like playing across the table: you play your round with your own fresh shuffle while your opponent waits, then they play theirs.</p>
       <div class="field"><input type="text" id="o-name" maxlength="16" placeholder="Your name"></div>
+      <div class="size-row" role="group" aria-label="Number of players">
+        <span class="pill" role="button" tabindex="0" data-n="2" aria-pressed="true">2 players</span>
+        <span class="pill" role="button" tabindex="0" data-n="3" aria-pressed="false">3 players</span>
+        <span class="pill" role="button" tabindex="0" data-n="4" aria-pressed="false">4 players</span>
+      </div>
+      <div class="seat-cfg" id="o-seats"></div>
       <div class="vis-row" role="group" aria-label="Room visibility">
         <span class="pill" role="button" tabindex="0" data-v="public" aria-pressed="true">public table</span>
         <span class="pill" role="button" tabindex="0" data-v="private" aria-pressed="false">private room</span>
@@ -269,14 +287,16 @@
     </div>
     <div class="online-box hidden" id="o-wait">
       <h2 id="o-wait-title">Room</h2>
-      <p>Share this code with your opponent — on the website or the mobile app. The duel starts the moment they join.</p>
+      <p>Share this code — the game starts the moment every seat is filled.</p>
       <div class="room-code" id="o-room-code"></div>
+      <div class="roster" id="o-roster"></div>
       <div class="spin"></div>
       <button class="btn btn-ghost" id="o-cancel" style="width:100%">Cancel</button>
     </div>
     <div id="o-game" class="hidden">
       <div class="board-head"><h2 id="o-round">Round 1</h2><button class="btn btn-ghost" id="o-leave">Leave</button></div>
       <div class="rail" id="o-rail"></div>
+      <div class="roster" id="o-game-roster"></div>
       <div class="hist" id="o-history"></div>
       <div id="o-play"></div>
       <div id="o-spectate"></div>
@@ -590,7 +610,7 @@ const E = window.CCEngine;
 const $ = (id) => document.getElementById(id);
 const ROW_LABELS = ['Hand 1','Hand 2','Hand 3','Hand 4','Crib'];
 const AI_NAMES = { easy:'Deckhand', medium:'Navigator', hard:'Captain' };
-const LANE_COLORS = ['var(--brass)','var(--jade)'];
+const LANE_COLORS = ['var(--brass)','var(--jade)','#B5703A','#7A86B8'];
 
 const S = {
   view:'home', mode:'ai', difficulty:'medium',
@@ -598,6 +618,7 @@ const S = {
   match:null, round:null, lastResult:null, aiTimer:null,
   // online
   code:null, seat:0, room:null, myName:'', visibility:'public',
+  roomSize:2, seatConfig:['open'], aiJob:'', aiTimerOnline:null,
   oRound:null, oSeed:0, oMoves:[], startedRound:-1,
   unwatch:null, pubUnwatch:null, publicRooms:null
 };
@@ -627,7 +648,7 @@ function railHTML(lanes, activeIdx){
       <div class="lane">
         <div class="zero-zone" style="width:${pct(0)}%"></div>
         <div class="notch" style="left:${pct(E.TARGET)}%"></div>
-        <div class="peg ${activeIdx===p?'active':''}" style="left:${pct(l.total)}%;background:${LANE_COLORS[p%2]}"></div>
+        <div class="peg ${activeIdx===p?'active':''}" style="left:${pct(l.total)}%;background:${LANE_COLORS[p%LANE_COLORS.length]}"></div>
       </div>
       <div class="lane-total ${l.total<0?'neg':''}">${l.total}</div>
     </div>`).join('')+
@@ -760,22 +781,29 @@ function showMatchOver(m){
 }
 
 /* ====================================================================
-   ONLINE DUEL — turn-based, fresh shuffles, live spectating, rejoin
+   ONLINE TABLE — 2–4 players, AI seat-fillers, live spectating, rejoin
    --------------------------------------------------------------------
-   rooms/{code}: players{p0,p1}, status, currentRound, turn, totals,
-                 rounds{i:{net0,net1}}, result,
-                 live{round,seat,seed,moves[]}   ← the active player's
-                 move log; powers the opponent's live view AND restoring
-                 your own round after a dropped connection.
-   publicRooms/{code}: {host,createdAt} — open tables anyone can join.
+   rooms/{code}: size, players{p0..p3:{name,joined,ai?,difficulty?,connected}},
+                 status, currentRound, turn, totals{t0..}, rounds{i:{net0..}},
+                 live{round,seat,seed,moves[]}, result ('p0'..'p3'|'tie')
+   publicRooms/{code}: {host,createdAt,size}
+   - Everyone plays each round in seat order with their own fresh shuffle.
+   - AI seats are played by the HOST's client (so the host must be online
+     for AI turns — the table simply waits otherwise).
+   - Presence: each client flags connected/disconnected via onDisconnect;
+     a dropped player's seat is shown as held open until they rejoin with
+     the same name. The live move log restores their half-played round.
    ==================================================================== */
 function oShow(part){
   for (const p of ['o-lobby','o-setup','o-wait','o-game']) $(p).classList.toggle('hidden',p!=='o-'+part);
 }
+const seatKeys=(room)=>Array.from({length:room.size||2},(_,k)=>'p'+k);
+const seatName=(room,k)=>{const p=(room.players||{})['p'+k];return p?p.name:'open seat';};
 async function openOnline(){
   show('online');
   if (!firebaseConfigured()) return oShow('setup');
   oShow('lobby');
+  renderSeatConfig();
   try{
     await loadFirebase();
     if (!S.pubUnwatch){
@@ -784,6 +812,22 @@ async function openOnline(){
       S.pubUnwatch=()=>ref.off('value',cb);
     }
   }catch(e){ $('o-public').innerHTML=`<div class="pub-empty">Couldn't reach the lobby — check your connection.</div>`; }
+}
+function renderSeatConfig(){
+  const box=$('o-seats'); if(!box) return;
+  while (S.seatConfig.length < S.roomSize-1) S.seatConfig.push('open');
+  S.seatConfig.length = S.roomSize-1;
+  box.innerHTML = S.seatConfig.map((cfg,idx)=>`
+    <div class="row"><span class="lbl">Seat ${idx+2}</span>
+      ${['open','easy','medium','hard'].map(v=>
+        `<span class="pill" role="button" tabindex="0" data-seat="${idx}" data-cfg="${v}"
+           aria-pressed="${cfg===v}">${v==='open'?'open':v+' AI'}</span>`).join('')}
+    </div>`).join('');
+  for (const p of box.querySelectorAll('.pill')){
+    const pick=()=>{ S.seatConfig[+p.dataset.seat]=p.dataset.cfg; renderSeatConfig(); };
+    p.addEventListener('click',pick);
+    p.addEventListener('keydown',(e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); pick(); }});
+  }
 }
 function renderPublicRooms(){
   const box=$('o-public'); if(!box) return;
@@ -794,7 +838,7 @@ function renderPublicRooms(){
   if (entries.length===0){ box.innerHTML='<div class="pub-empty">No open tables right now — open one above.</div>'; return; }
   box.innerHTML=entries.map(([code,v])=>{
     const mins=Math.max(0,Math.round((now-(v.createdAt||0))/60000));
-    return `<div class="pub-item"><div class="who">${esc(v.host||'Someone')}'s table<span class="age">${mins<1?'just now':mins+' min ago'}</span></div>
+    return `<div class="pub-item"><div class="who">${esc(v.host||'Someone')}'s table<span class="age">${v.size||2} seats · ${mins<1?'just now':mins+' min ago'}</span></div>
       <button class="btn btn-ghost" data-join="${code}">Join</button></div>`;
   }).join('');
   for (const b of box.querySelectorAll('[data-join]'))
@@ -802,26 +846,35 @@ function renderPublicRooms(){
 }
 function oError(msg){ const e=$('o-err'); e.textContent=msg; e.classList.remove('hidden'); }
 
+const AI_SEAT_NAMES={easy:'Deckhand',medium:'Navigator',hard:'Captain'};
+
 async function oCreate(){
   const name=$('o-name').value.trim(); if(!name) return oError('Enter your name first.');
   S.myName=name;
   try{
     const db=await loadFirebase();
     const code=makeRoomCode();
+    const size=S.roomSize;
+    const players={p0:{name,joined:true,connected:true}};
+    const totals={};
+    for(let k=0;k<size;k++) totals['t'+k]=0;
+    S.seatConfig.forEach((cfg,idx)=>{
+      if(cfg!=='open') players['p'+(idx+1)]={
+        name:`${AI_SEAT_NAMES[cfg]} (AI ${idx+2})`, joined:true, ai:true, difficulty:cfg, connected:true };
+    });
     await db.ref('rooms/'+code).set({
-      createdAt:Date.now(),
-      players:{p0:{name,joined:true}},
-      rounds:{}, currentRound:0, turn:0, totals:{t0:0,t1:0},
+      createdAt:Date.now(), size, players,
+      rounds:{}, currentRound:0, turn:0, totals,
       status:'waiting', visibility:S.visibility
     });
-    if (S.visibility==='public') await db.ref('publicRooms/'+code).set({host:name,createdAt:Date.now()});
-    S.code=code; S.seat=0; S.startedRound=-1;
+    if (S.visibility==='public') await db.ref('publicRooms/'+code).set({host:name,createdAt:Date.now(),size});
+    S.code=code; S.seat=0; S.startedRound=-1; S.aiJob='';
     $('o-room-code').textContent=code; $('o-wait-title').textContent='Room '+code;
-    oShow('wait'); watchRoom();
+    oShow('wait'); watchRoom(); registerPresence();
   }catch(e){ oError(e.message); }
 }
 
-/** Join OR rejoin: if a seat already carries your name, you get it back. */
+/** Join OR rejoin: a seat already carrying your name is yours to take back. */
 async function joinByCode(code){
   const name=$('o-name').value.trim(); if(!name) return oError('Enter your name first, then join.');
   if(!code||code.length!==5) return oError('Room codes are five letters.');
@@ -834,20 +887,31 @@ async function joinByCode(code){
       return oError('Room not found — check the code.');
     }
     const room=snap.val();
-    const p0=room.players&&room.players.p0, p1=room.players&&room.players.p1;
-    if (p0 && p0.name===name){ S.seat=0; }                       // rejoin as host
-    else if (p1 && p1.joined && p1.name===name){ S.seat=1; }     // rejoin as guest
-    else if (!p1 || !p1.joined){                                  // fresh join
-      await db.ref('rooms/'+code).update({'players/p1':{name,joined:true},status:'playing'});
-      db.ref('publicRooms/'+code).remove().catch(()=>{});
-      S.seat=1;
-    } else return oError('That room is full — and your name doesn\u2019t match either seat.');
-    S.code=code; S.startedRound=-1;
-    if (room.status==='waiting' && S.seat===0){
-      $('o-room-code').textContent=code; $('o-wait-title').textContent='Room '+code; oShow('wait');
+    const size=room.size||2;
+    let seat=-1;
+    for(let k=0;k<size;k++){
+      const p=(room.players||{})['p'+k];
+      if(p && p.joined && !p.ai && p.name===name){ seat=k; break; }   // rejoin
     }
-    watchRoom();
+    if(seat===-1){
+      for(let k=0;k<size;k++){
+        const p=(room.players||{})['p'+k];
+        if(!p || !p.joined){ seat=k; break; }                          // fresh open seat
+      }
+      if(seat===-1) return oError('That table is full — and your name doesn\u2019t match any seat.');
+      await db.ref('rooms/'+code+'/players/p'+seat).set({name,joined:true,connected:true});
+    }
+    S.code=code; S.seat=seat; S.startedRound=-1; S.aiJob='';
+    watchRoom(); registerPresence();
   }catch(e){ oError(e.message); }
+}
+
+function registerPresence(){
+  try{
+    const ref=fdb.ref('rooms/'+S.code+'/players/p'+S.seat);
+    ref.update({connected:true}).catch(()=>{});
+    if (ref.onDisconnect) ref.onDisconnect().update({connected:false});
+  }catch(e){}
 }
 
 function watchRoom(){
@@ -857,24 +921,54 @@ function watchRoom(){
   S.unwatch=()=>r.off('value',cb);
 }
 function leaveRoom(){
-  if(S.unwatch){ S.unwatch(); S.unwatch=null; }
-  // A host abandoning an un-started table takes it off the board.
-  if (S.room && S.seat===0 && S.room.status==='waiting' && S.code){
-    fdb.ref('rooms/'+S.code).remove().catch(()=>{});
-    fdb.ref('publicRooms/'+S.code).remove().catch(()=>{});
+  if(S.aiTimerOnline){ clearInterval(S.aiTimerOnline); S.aiTimerOnline=null; }
+  if (S.room && S.code){
+    if (S.seat===0 && S.room.status==='waiting'){
+      fdb.ref('rooms/'+S.code).remove().catch(()=>{});
+      fdb.ref('publicRooms/'+S.code).remove().catch(()=>{});
+    } else {
+      fdb.ref('rooms/'+S.code+'/players/p'+S.seat+'/connected').set(false).catch(()=>{});
+    }
   }
-  S.code=null; S.room=null; S.oRound=null; S.oMoves=[]; S.startedRound=-1;
+  if(S.unwatch){ S.unwatch(); S.unwatch=null; }
+  S.code=null; S.room=null; S.oRound=null; S.oMoves=[]; S.startedRound=-1; S.aiJob='';
   show('home');
 }
 const normMoves=(m)=>Array.isArray(m)?m.slice():m?Object.values(m):[];
 
+function rosterHTML(room){
+  const size=room.size||2;
+  let out='';
+  for(let k=0;k<size;k++){
+    const p=(room.players||{})['p'+k];
+    if(!p||!p.joined){ out+=`<span class="chip open">seat ${k+1} · open</span>`; continue; }
+    const off=!p.ai && p.connected===false;
+    out+=`<span class="chip ${off?'off':''}"><span class="dot"></span>${esc(p.name)}${k===S.seat?' (you)':''}
+      ${p.ai?'<span class="tag-ai">AI</span>':''}${off?'<span class="held">seat held — can rejoin</span>':''}</span>`;
+  }
+  return out;
+}
+
 function onRoomUpdate(){
   const room=S.room;
   if(!room){ oShow('lobby'); return oError('The room was closed.'); }
+  const size=room.size||2;
+
+  // Host: start the game once every seat is filled.
+  if(S.seat===0 && room.status==='waiting'){
+    const full=seatKeys(room).every((pk)=>room.players&&room.players[pk]&&room.players[pk].joined);
+    if(full){
+      fdb.ref('rooms/'+S.code).update({status:'playing'});
+      fdb.ref('publicRooms/'+S.code).remove().catch(()=>{});
+      return;
+    }
+  }
   if(room.status==='waiting'){
     $('o-room-code').textContent=S.code; $('o-wait-title').textContent='Room '+S.code;
+    $('o-roster').innerHTML=rosterHTML(room);
     return oShow('wait');
   }
+
   const i=room.currentRound;
   const entry=(room.rounds||{})[i]||{};
   const mySubmitted=entry['net'+S.seat]!==undefined;
@@ -890,19 +984,35 @@ function onRoomUpdate(){
       for (const m of S.oMoves) r=E.placeCard(r,m);
       S.oRound=r;
     } else {
-      // Fresh round, my own shuffle. Publish it so my opponent can watch
-      // — and so I can recover it if my connection drops.
       S.oSeed=E.randomSeed(); S.oMoves=[];
       S.oRound=E.newRound(S.oSeed);
       fdb.ref('rooms/'+S.code+'/live').set({round:i,seat:S.seat,seed:S.oSeed,moves:[]}).catch(()=>{});
     }
   }
-  // Host advances when both nets for this round are in (rounds always equal).
+
+  // Host plays AI seats when their turn comes.
   if(S.seat===0 && room.status==='playing'){
-    if(entry.net0!==undefined && entry.net1!==undefined){
-      const t0=room.totals.t0+entry.net0, t1=room.totals.t1+entry.net1;
-      const updates={ totals:{t0,t1} };
-      if (t0>=E.TARGET||t1>=E.TARGET){ updates.status='done'; updates.result=t0>t1?'p0':t1>t0?'p1':'tie'; }
+    const tp=(room.players||{})['p'+room.turn];
+    if(tp && tp.ai && entry['net'+room.turn]===undefined && S.aiJob!==i+':'+room.turn){
+      runRemoteAi(i, room.turn, tp.difficulty||'medium', size);
+    }
+  }
+
+  // Host advances when every seat's net for this round is in.
+  if(S.seat===0 && room.status==='playing'){
+    let all=true;
+    for(let k=0;k<size;k++) if(entry['net'+k]===undefined){ all=false; break; }
+    if(all){
+      const totals={};
+      let best=-Infinity, bestCount=0, bestSeat=0, anyHome=false;
+      for(let k=0;k<size;k++){
+        const t=(room.totals['t'+k]||0)+entry['net'+k];
+        totals['t'+k]=t;
+        if(t>=E.TARGET) anyHome=true;
+        if(t>best){ best=t; bestSeat=k; bestCount=1; } else if(t===best) bestCount++;
+      }
+      const updates={ totals };
+      if(anyHome){ updates.status='done'; updates.result=bestCount>1?'tie':'p'+bestSeat; }
       else { updates.currentRound=i+1; updates.turn=0; }
       fdb.ref('rooms/'+S.code).update(updates);
     }
@@ -910,32 +1020,61 @@ function onRoomUpdate(){
   renderOnline();
 }
 
-function historyHTML(room, myName, theirName){
+/** Host-side AI runner: publishes moves live so everyone can watch. */
+function runRemoteAi(roundIndex, seat, difficulty, size){
+  S.aiJob=roundIndex+':'+seat;
+  if(S.aiTimerOnline) clearInterval(S.aiTimerOnline);
+  const seed=E.randomSeed();
+  let r=E.newRound(seed);
+  const moves=[];
+  fdb.ref('rooms/'+S.code+'/live').set({round:roundIndex,seat,seed,moves:[]}).catch(()=>{});
+  S.aiTimerOnline=setInterval(()=>{
+    if(!S.room || S.room.status!=='playing'){ clearInterval(S.aiTimerOnline); return; }
+    if(r.complete){
+      clearInterval(S.aiTimerOnline); S.aiTimerOnline=null;
+      const net=E.scoreRound(r).net;
+      fdb.ref('rooms/'+S.code).update({
+        ['rounds/'+roundIndex+'/net'+seat]:net,
+        turn:(seat+1)%size
+      }).catch(()=>{});
+      return;
+    }
+    const m=E.aiChooseRow(r,difficulty);
+    r=E.placeCard(r,m);
+    moves.push(m);
+    fdb.ref('rooms/'+S.code+'/live/moves').set(moves.slice()).catch(()=>{});
+  },350);
+}
+
+function historyHTML(room){
+  const size=room.size||2;
   const rounds=room.rounds||{};
   const keys=Object.keys(rounds).map(Number).sort((a,b)=>a-b);
   if(keys.length===0) return '';
   const fmt=(n)=>n===undefined?'…':(n>=0?'+':'')+n;
   return keys.map(k=>{
     const e=rounds[k]||{};
-    const mine=e['net'+S.seat], theirs=e['net'+(1-S.seat)];
-    return `R${k+1} — <b>${esc(myName)}</b> ${fmt(mine)} · <b>${esc(theirName)}</b> ${fmt(theirs)}`;
+    const parts=[];
+    for(let s=0;s<size;s++) parts.push(`<b>${esc(seatName(room,s))}</b> ${fmt(e['net'+s])}`);
+    return `R${k+1} — `+parts.join(' · ');
   }).join('<br>');
 }
 
 function renderOnline(){
   const room=S.room; if(!room||room.status==='waiting') return;
   oShow('game');
-  const myName=S.myName||'You';
-  const theirName=(S.seat===0?(room.players.p1&&room.players.p1.name):(room.players.p0&&room.players.p0.name))||'Opponent';
-  const totals=S.seat===0?[room.totals.t0,room.totals.t1]:[room.totals.t1,room.totals.t0];
+  const size=room.size||2;
   $('o-round').textContent=`Round ${room.currentRound+1}`;
-  $('o-rail').innerHTML=railHTML([{name:myName,total:totals[0]},{name:theirName,total:totals[1]}],0);
-  $('o-history').innerHTML=historyHTML(room,myName,theirName);
+  const lanes=[];
+  for(let k=0;k<size;k++) lanes.push({name:seatName(room,k)+(k===S.seat?' (you)':''), total:room.totals['t'+k]||0});
+  $('o-rail').innerHTML=railHTML(lanes, room.status==='playing'?room.turn:-1);
+  $('o-game-roster').innerHTML=rosterHTML(room);
+  $('o-history').innerHTML=historyHTML(room);
 
   if(room.status==='done'){
-    const iWon=(room.result==='p0'&&S.seat===0)||(room.result==='p1'&&S.seat===1);
-    $('do-title').textContent= room.result==='tie'?"It's a tie": iWon?'You win the duel':`${theirName} takes it`;
-    $('do-sub').textContent=`${myName} ${totals[0]} · ${theirName} ${totals[1]}`;
+    const iWon=room.result==='p'+S.seat;
+    $('do-title').textContent= room.result==='tie'?"It's a tie": iWon?'You win the table':`${seatName(room,+room.result.slice(1))} takes it`;
+    $('do-sub').textContent=lanes.map(l=>`${l.name.replace(' (you)','')} ${l.total}`).join(' · ');
     $('o-play').innerHTML=''; $('o-spectate').innerHTML=''; $('o-waiting').classList.add('hidden');
     if(!$('d-over').open) $('d-over').showModal();
     return;
@@ -951,7 +1090,7 @@ function renderOnline(){
     const rowScores=r.complete?E.scoreRound(r).rowScores:null;
     const head = r.complete
       ? `<div class="draw"><div><div class="label">Starter</div><div class="sub">Counts in all five hands.</div></div>${cardHTML(r.starter,'lg',false,true)}</div>`
-      : `<div class="draw"><div><div class="label">Your card</div><div class="sub">Your shuffle, your round — tap a hand or press 1–4. The crib deals itself. ${esc(theirName)} is watching live.</div></div>${cardHTML(r.current,'lg',false,true)}</div>`;
+      : `<div class="draw"><div><div class="label">Your card</div><div class="sub">Your shuffle, your round — tap a hand or press 1–4. The crib deals itself. The table is watching live.</div></div>${cardHTML(r.current,'lg',false,true)}</div>`;
     const submit = r.complete
       ? `<button class="btn btn-primary" id="o-submit" style="width:100%;margin-top:6px">Submit ${E.scoreRound(r).net>=0?'+':''}${E.scoreRound(r).net}</button>` : '';
     $('o-play').innerHTML=head+rowsHTML(r,(i)=>E.canPlace(r,i),rowScores)+submit;
@@ -968,28 +1107,38 @@ function renderOnline(){
       const net=E.scoreRound(S.oRound).net;
       fdb.ref('rooms/'+S.code).update({
         ['rounds/'+room.currentRound+'/net'+S.seat]:net,
-        turn: S.seat===0?1:0
+        turn:(S.seat+1)%size
       });
     });
     return;
   }
 
-  // Not my turn: watch the opponent's placements live, move for move.
+  // Not my turn: watch whoever is placing, move for move.
   $('o-play').innerHTML='';
   const live=room.live;
+  const turnPlayer=(room.players||{})['p'+room.turn];
+  const turnName=turnPlayer?turnPlayer.name:'…';
   if (live && live.round===room.currentRound && live.seat!==S.seat && live.seed!==undefined){
     let lr=E.newRound(live.seed);
     for (const m of normMoves(live.moves)) lr=E.placeCard(lr,m);
+    const liveName=seatName(room,live.seat);
     const rowScores=lr.complete?E.scoreRound(lr).rowScores:null;
+    const livePlayer=(room.players||{})['p'+live.seat];
+    const liveOff=livePlayer && !livePlayer.ai && livePlayer.connected===false;
     const head=lr.complete
-      ? `<div class="draw"><div><div class="label">${esc(theirName)}'s starter</div><div class="sub">Counting up their five hands…</div></div>${cardHTML(lr.starter,'lg',false,true)}</div>`
-      : `<div class="draw"><div><div class="label">${esc(theirName)} is placing<span class="live-badge">LIVE</span></div><div class="sub">Their shuffle, their round — every move shows here as they make it.</div></div>${cardHTML(lr.current,'lg',false,true)}</div>`;
+      ? `<div class="draw"><div><div class="label">${esc(liveName)}'s starter</div><div class="sub">Counting up their five hands…</div></div>${cardHTML(lr.starter,'lg',false,true)}</div>`
+      : liveOff
+        ? `<div class="draw"><div><div class="label">${esc(liveName)} disconnected<span class="live-badge" style="background:var(--brass-dim)">SEAT HELD</span></div><div class="sub">Their board is frozen where they left it — the table waits, and they can rejoin with the same name and code to pick it right back up.</div></div>${cardHTML(lr.current,'lg',false,true)}</div>`
+        : `<div class="draw"><div><div class="label">${esc(liveName)} is placing<span class="live-badge">LIVE</span></div><div class="sub">Their shuffle, their round — every move shows here as they make it.</div></div>${cardHTML(lr.current,'lg',false,true)}</div>`;
     $('o-spectate').innerHTML=head+rowsHTML(lr,()=>false,rowScores);
     $('o-waiting').classList.add('hidden');
   } else {
     $('o-spectate').innerHTML='';
     $('o-waiting').classList.remove('hidden');
-    $('o-waiting-text').textContent=`${theirName} is playing their round…`;
+    const off=turnPlayer && !turnPlayer.ai && turnPlayer.connected===false;
+    $('o-waiting-text').textContent= off
+      ? `${turnName} is disconnected — their seat is held while the table waits.`
+      : `${turnName} is playing their round…`;
   }
 }
 
@@ -1005,6 +1154,13 @@ for (const p of document.querySelectorAll('#diff-picker .pill')){
     document.querySelectorAll('#diff-picker .pill').forEach(x=>x.setAttribute('aria-pressed',String(x===p))); };
   p.addEventListener('click',(e)=>{ e.stopPropagation(); pick(); });
   p.addEventListener('keydown',(e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); e.stopPropagation(); pick(); }});
+}
+for (const p of document.querySelectorAll('.size-row .pill')){
+  const pick=()=>{ S.roomSize=+p.dataset.n;
+    document.querySelectorAll('.size-row .pill').forEach(x=>x.setAttribute('aria-pressed',String(x===p)));
+    renderSeatConfig(); };
+  p.addEventListener('click',pick);
+  p.addEventListener('keydown',(e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); pick(); }});
 }
 for (const p of document.querySelectorAll('.vis-row .pill')){
   const pick=()=>{ S.visibility=p.dataset.v;
