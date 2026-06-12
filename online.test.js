@@ -250,6 +250,16 @@ const playOut = async (win) => {
   await waitFor(() => $a('d-profile').open, 1500);
   check('profile: opponent dialog shows Cara with friend toggle', $a('dp-name').textContent === 'Cara' && $a('dp-friend').textContent === 'Remove friend');
 
-  console.log(fails === 0 ? '\nMULTIPLAYER V5 TEST PASSED' : `\n${fails} FAILURES`);
+  // campaign progress saves to the account
+  $a('dp-close') && $a('d-profile').open && $a('dp-close').click();
+  A.document.getElementById('tile-map').click();
+  await sleep(40);
+  A.document.querySelector('.map-node[data-level="1"]').click();
+  A.document.getElementById('dl-play').click();
+  A.__cc.challengeWin(2);
+  await sleep(80);
+  check('campaign: progress synced to the account', (store.users[aUid].campaign || {}).level === 2 && store.users[aUid].campaign.stars['1'] === 2);
+
+  console.log(fails === 0 ? '\nMULTIPLAYER V6 TEST PASSED' : `\n${fails} FAILURES`);
   process.exit(fails ? 1 : 0);
 })().catch((e) => { console.error('CRASH:', e); process.exit(1); });

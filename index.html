@@ -166,6 +166,21 @@
   .chip.clicky{cursor:pointer}.chip.clicky:hover{border-color:var(--brass)}
   .dp-games{margin-top:12px;font-size:12px;color:var(--cream-dim);line-height:2}
   #d-profile{max-width:420px}
+  .lives-bar{display:flex;align-items:center;gap:12px;margin:2px 0 10px;font-size:20px;color:var(--ink-red);
+    text-shadow:0 1px 6px rgba(0,0,0,.7)}
+  .lives-bar .dimheart{color:var(--cream-dim);opacity:.6}
+  #map-path{position:relative;max-width:520px;margin:0 auto}
+  #map-svg{position:absolute;inset:0;width:100%;height:100%}
+  .map-node{position:absolute;transform:translate(-50%,-50%);width:58px;height:58px;border-radius:50%;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(28,14,12,.9);border:2px solid var(--lacquer-edge);transition:transform .15s,border-color .15s}
+  .map-node .num{font-family:var(--display);font-size:20px;color:var(--cream)}
+  .map-node .stars{font-size:9px;color:var(--brass);line-height:1;margin-top:1px;letter-spacing:1px}
+  .map-node.open{border-color:var(--brass);box-shadow:0 0 0 4px #C9A22722,0 6px 16px rgba(0,0,0,.5)}
+  .map-node.open:hover{transform:translate(-50%,-50%) scale(1.08)}
+  .map-node.done{border-color:var(--brass-dim)}
+  .map-node.locked{opacity:.45}
+  .chal-stars{font-size:34px;color:var(--brass);letter-spacing:6px;margin:8px 0 2px;text-shadow:0 2px 12px #C9A22755}
   .hidden{display:none !important}
   footer{margin-top:64px;color:var(--cream-dim);font-size:12px;border-top:1px solid var(--lacquer-edge);padding-top:20px;line-height:1.7}
   footer code{color:var(--cream);background:var(--lacquer-deep);padding:1px 6px;border-radius:4px}
@@ -249,6 +264,11 @@
         <p>You against the deck. Reach 29 fast.</p>
         <span class="tag">PLAYS OFFLINE</span>
       </button>
+      <button class="tile" id="tile-map">
+        <h2>Challenge map</h2>
+        <p>24 levels, rising stakes. 5 hearts.</p>
+        <span class="tag">PLAYS OFFLINE</span>
+      </button>
       <button class="tile" id="tile-ai">
         <h2>Versus AI</h2>
         <p>Race the house to 29.</p>
@@ -287,6 +307,16 @@
     </div>
     <div id="g-callout"></div>
     <div id="g-rows"></div>
+  </main>
+
+  <!-- ============ MAP ============ -->
+  <main id="view-map" class="hidden">
+    <div class="board-head">
+      <h2>Challenge map</h2>
+      <button class="btn btn-ghost" id="map-back">Back</button>
+    </div>
+    <div class="lives-bar"><span id="map-lives"></span><span class="age" id="map-timer"></span></div>
+    <div id="map-path"></div>
   </main>
 
   <!-- ============ ONLINE ============ -->
@@ -362,6 +392,23 @@
   </main>
 
   <!-- ============ DIALOGS ============ -->
+  <dialog id="d-level">
+    <div class="d-eyebrow" id="dl-eyebrow">Level</div>
+    <div class="d-big" id="dl-name"></div>
+    <div class="d-sub" id="dl-desc"></div>
+    <div class="d-sub" id="dl-lives" style="color:var(--ink-red)"></div>
+    <button class="btn btn-primary" id="dl-play">Play</button>
+    <button class="btn btn-ghost" id="dl-close">Not yet</button>
+  </dialog>
+  <dialog id="d-chal">
+    <div class="d-eyebrow" id="dcr-eyebrow"></div>
+    <div class="d-big" id="dcr-title"></div>
+    <div class="chal-stars" id="dcr-stars"></div>
+    <div class="d-sub" id="dcr-sub"></div>
+    <button class="btn btn-primary" id="dcr-next">Next level</button>
+    <button class="btn btn-primary" id="dcr-retry">Retry (1 ❤)</button>
+    <button class="btn btn-ghost" id="dcr-map">Back to map</button>
+  </dialog>
   <dialog id="d-profile">
     <div class="d-eyebrow">Player profile</div>
     <div class="d-big" id="dp-name"></div>
@@ -784,6 +831,7 @@ const S = {
   players:[{name:'You',kind:'human'},{name:'Navigator',kind:'ai'}],
   match:null, round:null, lastResult:null, aiTimer:null,
   count:null, oCounted:-1,
+  campaign:{level:1, stars:{}, lives:5, lastLifeAt:Date.now()}, challenge:null, pendingLevel:null, lastClearedLevel:null, mapTick:null,
   // online
   code:null, seat:0, room:null, myName:'', visibility:'public',
   roomSize:2, seatConfig:['open'], aiJob:'', aiTimerOnline:null, rosterTick:null,
@@ -797,7 +845,7 @@ const S = {
 
 function show(view){
   S.view = view;
-  for (const v of ['home','game','online']) $('view-'+v).classList.toggle('hidden', v!==view);
+  for (const v of ['home','game','online','map']) $('view-'+v).classList.toggle('hidden', v!==view);
   $('btn-quit').classList.toggle('hidden', view!=='game');
   window.scrollTo(0,0);
 }
@@ -931,6 +979,237 @@ function calloutHTML(prefix, c){
 }
 
 /* ====================================================================
+   CHALLENGE MAP
+   --------------------------------------------------------------------
+   A winding campaign of 24 levels. Three challenge types:
+     solo      reach 29 within N rounds
+     bestRound score X or more in a single round, within N rounds
+     ai        beat a named AI, who may start with a head start
+   Lives: 5 hearts. Failing a level (or quitting mid-level) costs one.
+   One heart regrows every 30 minutes (window.__lifeMs overrides in tests).
+   Stars: 1 to 3 per level by margin. Progress saves to your account when
+   signed in; otherwise it lives for the session.
+   ==================================================================== */
+const MAX_LIVES = 5;
+const LIFE_MS = () => (typeof window.__lifeMs === 'number' ? window.__lifeMs : 30 * 60 * 1000);
+
+const LEVELS = [
+  { id: 1,  type: 'solo',      rounds: 8, name: 'First steps',        desc: 'Reach 29 within 8 rounds.' },
+  { id: 2,  type: 'solo',      rounds: 6, name: 'Finding the fives',  desc: 'Reach 29 within 6 rounds.' },
+  { id: 3,  type: 'bestRound', score: 35, rounds: 5, name: 'One good deal', desc: 'Score 35 or more in a single round. 5 rounds to do it.' },
+  { id: 4,  type: 'ai', difficulty: 'easy',   handicap: 0,  name: 'The Deckhand',   desc: 'Beat the Deckhand in a race to 29.' },
+  { id: 5,  type: 'solo',      rounds: 5, name: 'Tighter now',        desc: 'Reach 29 within 5 rounds.' },
+  { id: 6,  type: 'ai', difficulty: 'easy',   handicap: 5,  name: 'Head start',     desc: 'The Deckhand starts 5 up the rail. Beat them anyway.' },
+  { id: 7,  type: 'bestRound', score: 40, rounds: 5, name: 'Forty or nothing', desc: 'Score 40 or more in a single round. 5 rounds to do it.' },
+  { id: 8,  type: 'ai', difficulty: 'medium', handicap: 0,  name: 'The Navigator',  desc: 'Beat the Navigator in a race to 29.' },
+  { id: 9,  type: 'solo',      rounds: 4, name: 'Four rounds flat',   desc: 'Reach 29 within 4 rounds.' },
+  { id: 10, type: 'ai', difficulty: 'medium', handicap: 5,  name: 'Uphill water',   desc: 'The Navigator starts 5 up. Beat them anyway.' },
+  { id: 11, type: 'bestRound', score: 45, rounds: 5, name: 'High tide',     desc: 'Score 45 or more in a single round. 5 rounds to do it.' },
+  { id: 12, type: 'ai', difficulty: 'medium', handicap: 10, name: 'Ten behind',     desc: 'The Navigator starts 10 up. Beat them anyway.' },
+  { id: 13, type: 'solo',      rounds: 3, name: 'Three to shore',     desc: 'Reach 29 within 3 rounds.' },
+  { id: 14, type: 'ai', difficulty: 'hard',   handicap: 0,  name: 'The Captain',    desc: 'Beat the Captain in a race to 29.' },
+  { id: 15, type: 'bestRound', score: 50, rounds: 6, name: 'Half a hundred', desc: 'Score 50 or more in a single round. 6 rounds to do it.' },
+  { id: 16, type: 'ai', difficulty: 'hard',   handicap: 5,  name: 'Rough seas',     desc: 'The Captain starts 5 up. Beat them anyway.' },
+  { id: 17, type: 'solo',      rounds: 3, name: 'No slack',           desc: 'Reach 29 within 3 rounds. Again, but you know more now.' },
+  { id: 18, type: 'ai', difficulty: 'hard',   handicap: 10, name: 'Taking on water', desc: 'The Captain starts 10 up. Beat them anyway.' },
+  { id: 19, type: 'bestRound', score: 55, rounds: 6, name: 'Stacked deck',   desc: 'Score 55 or more in a single round. 6 rounds to do it.' },
+  { id: 20, type: 'ai', difficulty: 'hard',   handicap: 15, name: 'Fifteen down',   desc: 'The Captain starts 15 up. Beat them anyway.' },
+  { id: 21, type: 'solo',      rounds: 2, name: 'Two perfect rounds', desc: 'Reach 29 within 2 rounds. Average 44 a round. Good luck.' },
+  { id: 22, type: 'ai', difficulty: 'hard',   handicap: 20, name: 'Twenty down',    desc: 'The Captain starts 20 up. Beat them anyway.' },
+  { id: 23, type: 'bestRound', score: 60, rounds: 8, name: 'The legend hand', desc: 'Score 60 or more in a single round. 8 rounds to chase it.' },
+  { id: 24, type: 'ai', difficulty: 'hard',   handicap: 25, name: "The Captain's table", desc: 'The Captain starts 25 up the rail. Take the table anyway.' },
+];
+
+function blankCampaign(){
+  return { level: 1, stars: {}, lives: MAX_LIVES, lastLifeAt: Date.now() };
+}
+
+/** Lazy heart regrowth: one per LIFE_MS, capped at MAX_LIVES. */
+function refreshLives(){
+  const c = S.campaign;
+  if (c.lives >= MAX_LIVES) { c.lastLifeAt = Date.now(); return; }
+  const elapsed = Date.now() - c.lastLifeAt;
+  const gained = Math.floor(elapsed / LIFE_MS());
+  if (gained > 0) {
+    c.lives = Math.min(MAX_LIVES, c.lives + gained);
+    c.lastLifeAt = c.lives >= MAX_LIVES ? Date.now() : c.lastLifeAt + gained * LIFE_MS();
+    saveCampaign();
+  }
+}
+function loseLife(){
+  refreshLives();
+  const c = S.campaign;
+  if (c.lives >= MAX_LIVES) c.lastLifeAt = Date.now(); // the regrow clock starts now
+  c.lives = Math.max(0, c.lives - 1);
+  saveCampaign();
+}
+function nextLifeIn(){
+  const c = S.campaign;
+  if (c.lives >= MAX_LIVES) return 0;
+  return Math.max(0, LIFE_MS() - (Date.now() - c.lastLifeAt));
+}
+function saveCampaign(){
+  if (S.uid) fdb.ref('users/' + S.uid + '/campaign').set(S.campaign).catch(() => {});
+}
+function mergeCampaign(stored){
+  if (!stored) return;
+  const c = S.campaign;
+  c.level = Math.max(c.level, stored.level || 1);
+  for (const k in (stored.stars || {})) c.stars[k] = Math.max(c.stars[k] || 0, stored.stars[k]);
+  if (typeof stored.lives === 'number') { c.lives = stored.lives; c.lastLifeAt = stored.lastLifeAt || Date.now(); }
+  refreshLives();
+}
+
+/* ---------- the map ---------- */
+const NODE_X = [18, 50, 82, 50];
+function renderMap(){
+  refreshLives();
+  const c = S.campaign;
+  const wrap = $('map-path'); if (!wrap) return;
+  const H = LEVELS.length * 84 + 80;
+  wrap.style.height = H + 'px';
+  const pts = LEVELS.map((lv, i) => ({ x: NODE_X[i % NODE_X.length], y: 40 + i * 84 }));
+  const svgPts = pts.map((p) => `${p.x},${(p.y / H) * 100}`).join(' ');
+  let html = `<svg id="map-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+    <polyline points="${svgPts}" fill="none" stroke="var(--brass-dim)" stroke-width="1.1"
+      stroke-dasharray="2.4 2.2" vector-effect="non-scaling-stroke" opacity="0.85"/></svg>`;
+  html += LEVELS.map((lv, i) => {
+    const p = pts[i];
+    const stars = c.stars[lv.id] || 0;
+    const unlocked = lv.id <= c.level;
+    const done = stars > 0;
+    return `<button class="map-node ${unlocked ? (done ? 'done' : 'open') : 'locked'}"
+        style="left:${p.x}%;top:${p.y}px" data-level="${lv.id}" ${unlocked ? '' : 'disabled'}
+        aria-label="Level ${lv.id}: ${lv.name}">
+      <span class="num">${unlocked ? lv.id : '🔒'}</span>
+      <span class="stars">${done ? '★'.repeat(stars) + '☆'.repeat(3 - stars) : ''}</span>
+    </button>`;
+  }).join('');
+  wrap.innerHTML = html;
+  for (const b of wrap.querySelectorAll('.map-node:not([disabled])'))
+    b.addEventListener('click', () => openLevel(+b.dataset.level));
+  renderLivesBar();
+}
+function renderLivesBar(){
+  refreshLives();
+  const c = S.campaign;
+  const hearts = $('map-lives');
+  if (hearts) hearts.innerHTML = '❤'.repeat(c.lives) + '<span class="dimheart">' + '♡'.repeat(MAX_LIVES - c.lives) + '</span>';
+  const t = $('map-timer');
+  if (t) {
+    const ms = nextLifeIn();
+    t.textContent = c.lives >= MAX_LIVES ? 'hearts full'
+      : 'next life in ' + Math.floor(ms / 60000) + ':' + String(Math.ceil((ms % 60000) / 1000)).padStart(2, '0');
+  }
+}
+function startMapTick(){
+  if (S.mapTick) clearInterval(S.mapTick);
+  S.mapTick = setInterval(() => {
+    if (S.view !== 'map') return;
+    const before = S.campaign.lives;
+    renderLivesBar();
+    if (S.campaign.lives !== before) renderMap();
+  }, 1000);
+}
+function openMap(){
+  show('map');
+  renderMap();
+  startMapTick();
+}
+
+/* ---------- level intro ---------- */
+function openLevel(id){
+  refreshLives();
+  const lv = LEVELS.find((x) => x.id === id); if (!lv) return;
+  S.pendingLevel = lv;
+  $('dl-eyebrow').textContent = 'Level ' + lv.id + (S.campaign.stars[lv.id] ? ' · ' + '★'.repeat(S.campaign.stars[lv.id]) : '');
+  $('dl-name').textContent = lv.name;
+  $('dl-desc').textContent = lv.desc + ' Failing or quitting costs a life.';
+  const ok = S.campaign.lives > 0;
+  $('dl-play').disabled = !ok;
+  $('dl-play').textContent = ok ? 'Play (1 ❤ at stake)' : 'No lives left';
+  $('dl-lives').innerHTML = ok ? '' : 'A new heart grows every 30 minutes.';
+  $('d-level').showModal();
+}
+function startLevel(){
+  const lv = S.pendingLevel; if (!lv) return;
+  refreshLives();
+  if (S.campaign.lives <= 0) return;
+  $('d-level').close();
+  S.challenge = { level: lv, roundsUsed: 0 };
+  if (lv.type === 'ai') {
+    S.difficulty = lv.difficulty;
+    startMatch('ai');
+    S.players[1].name = lv.name.startsWith('The') ? lv.name.replace('The ', '') : AI_NAMES[lv.difficulty];
+    S.match.totals[1] = lv.handicap || 0;
+    renderGame();
+  } else {
+    startMatch('solo');
+  }
+}
+
+/* ---------- evaluation ---------- */
+function challengeStarsSolo(lv, roundsUsed){
+  return Math.max(1, Math.min(3, 1 + (lv.rounds - roundsUsed)));
+}
+function challengeStarsBest(lv, handTotal){
+  return Math.max(1, Math.min(3, 1 + Math.floor((handTotal - lv.score) / 5)));
+}
+function challengeStarsAi(m, seat){
+  const margin = m.totals[seat] - m.totals[1 - seat];
+  return margin >= 20 ? 3 : margin >= 10 ? 2 : 1;
+}
+/** Called from nextRound (solo modes) after totals update. True = handled. */
+function challengeSoloStep(roundResult){
+  const ch = S.challenge; if (!ch) return false;
+  const lv = ch.level;
+  ch.roundsUsed += 1;
+  if (lv.type === 'bestRound') {
+    if (roundResult.handTotal >= lv.score) { challengeWin(challengeStarsBest(lv, roundResult.handTotal)); return true; }
+    if (ch.roundsUsed >= lv.rounds) { challengeFail(); return true; }
+    return false;
+  }
+  // solo: reach 29 within N rounds
+  if (S.match.totals[0] >= E.TARGET) { challengeWin(challengeStarsSolo(lv, ch.roundsUsed)); return true; }
+  if (ch.roundsUsed >= lv.rounds) { challengeFail(); return true; }
+  return false;
+}
+function challengeWin(stars){
+  const ch = S.challenge; if (!ch) return;
+  const lv = ch.level;
+  const c = S.campaign;
+  c.stars[lv.id] = Math.max(c.stars[lv.id] || 0, stars);
+  if (lv.id >= c.level && lv.id < LEVELS.length) c.level = lv.id + 1;
+  saveCampaign();
+  S.challenge = null; S.match = null; S.round = null; cancelCount(); clearInterval(S.aiTimer);
+  $('dcr-eyebrow').textContent = 'Level ' + lv.id + ' cleared';
+  $('dcr-title').textContent = lv.name;
+  $('dcr-stars').textContent = '★'.repeat(stars) + '☆'.repeat(3 - stars);
+  $('dcr-sub').textContent = lv.id < LEVELS.length ? 'The path continues.' : 'You have cleared the whole map. Remarkable.';
+  $('dcr-retry').classList.add('hidden');
+  $('dcr-next').classList.toggle('hidden', lv.id >= LEVELS.length);
+  S.lastClearedLevel = lv.id;
+  $('d-chal').showModal();
+}
+function challengeFail(){
+  const ch = S.challenge; if (!ch) return;
+  const lv = ch.level;
+  loseLife();
+  S.challenge = null; S.match = null; S.round = null; cancelCount(); clearInterval(S.aiTimer);
+  $('dcr-eyebrow').textContent = 'Level ' + lv.id + ' failed · −1 ❤';
+  $('dcr-title').textContent = lv.name;
+  $('dcr-stars').textContent = '';
+  $('dcr-sub').textContent = S.campaign.lives > 0
+    ? 'You have ' + S.campaign.lives + (S.campaign.lives === 1 ? ' life' : ' lives') + ' left.'
+    : 'No lives left. A new heart grows every 30 minutes.';
+  $('dcr-retry').classList.toggle('hidden', S.campaign.lives <= 0);
+  $('dcr-next').classList.add('hidden');
+  S.lastClearedLevel = null;
+  S.pendingLevel = lv;
+  $('d-chal').showModal();
+}
+
+/* ====================================================================
    LOCAL GAME (solo / vs AI / pass & play)
    ==================================================================== */
 function startMatch(mode){
@@ -951,7 +1230,13 @@ function startMatch(mode){
 function renderGame(){
   const m=S.match, r=S.round; if(!m) return;
   const seat=m.turn;
-  $('g-round').textContent = `Round ${m.roundsPlayed[seat]+1}`;
+  if (S.challenge){
+    const lv=S.challenge.level;
+    const budget = lv.type==='ai' ? '' : ` / ${lv.rounds}`;
+    $('g-round').textContent = `Level ${lv.id} · Round ${m.roundsPlayed[seat]+1}${budget}`;
+  } else {
+    $('g-round').textContent = `Round ${m.roundsPlayed[seat]+1}`;
+  }
   const lanes = S.mode==='solo'
     ? [{name:'You', total:m.totals[0]}]
     : [{name:S.players[0].name,total:m.totals[0]},{name:S.players[1].name,total:m.totals[1]}];
@@ -1001,9 +1286,16 @@ function onRoundComplete(){
 function nextRound(){
   $('d-score').close();
   if (S.mode==='solo'){
+    const challengeRound=S.lastResult.result;
     S.match.totals[0]+=S.lastResult.result.net;
     S.match.roundsPlayed[0]+=1;
     S.lastResult=null;
+    if (S.challenge){
+      if (challengeSoloStep(challengeRound)) return;
+      S.round=E.newRound(E.randomSeed());
+      renderGame();
+      return;
+    }
     if (S.match.totals[0]>=E.TARGET){
       const n=S.match.roundsPlayed[0];
       S.round=null; renderGame();
@@ -1040,6 +1332,12 @@ function runAiRound(){
 }
 
 function showMatchOver(m){
+  if (S.challenge && S.mode==='ai'){
+    const o=m.outcome;
+    if (o.kind==='win' && o.player===0) challengeWin(challengeStarsAi(m,0));
+    else challengeFail();
+    return;
+  }
   const o=m.outcome;
   $('do-title').textContent= o.kind==='tie' ? "It's a tie" : `${S.players[o.player].name} wins`;
   $('do-sub').textContent=`${S.players[0].name} ${m.totals[0]} · ${S.players[1].name} ${m.totals[1]}`;
@@ -1124,6 +1422,8 @@ async function establishUser(user){
       await fdb.ref('friendCodes/'+friendCode).set(user.uid);
     }
     S.myName=S.profile.name;
+    mergeCampaign(S.profile.campaign);
+    saveCampaign();
     // user-level presence for the friends list
     const meRef=fdb.ref('users/'+S.uid);
     meRef.update({online:true}).catch(()=>{});
@@ -1776,6 +2076,16 @@ function renderOnline(){
    WIRING
    ==================================================================== */
 $('tile-solo').addEventListener('click',()=>startMatch('solo'));
+$('tile-map').addEventListener('click',openMap);
+$('map-back').addEventListener('click',()=>{ if(S.mapTick) clearInterval(S.mapTick); show('home'); });
+$('dl-play').addEventListener('click',startLevel);
+$('dl-close').addEventListener('click',()=>$('d-level').close());
+$('dcr-map').addEventListener('click',()=>{ $('d-chal').close(); openMap(); });
+$('dcr-retry').addEventListener('click',()=>{ $('d-chal').close(); startLevel(); });
+$('dcr-next').addEventListener('click',()=>{ $('d-chal').close();
+  const nxt=LEVELS.find((x)=>x.id===(S.lastClearedLevel||0)+1);
+  if(nxt){ S.pendingLevel=nxt; startLevel(); } else openMap(); });
+window.__cc={ get S(){return S;}, LEVELS, challengeWin, challengeFail, refreshLives, renderMap, openLevel };
 $('tile-ai').addEventListener('click',(e)=>{ if(e.target.closest('.pill')) return; startMatch('ai'); });
 $('tile-pass').addEventListener('click',()=>startMatch('pass'));
 $('tile-online').addEventListener('click',openOnline);
@@ -1799,8 +2109,10 @@ for (const p of document.querySelectorAll('.vis-row .pill')){
   p.addEventListener('click',pick);
   p.addEventListener('keydown',(e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); pick(); }});
 }
-$('btn-quit').addEventListener('click',()=>{ cancelCount(); clearInterval(S.aiTimer); S.match=null; S.round=null;
-  ['d-score','d-handoff','d-over'].forEach(d=>{ if($(d).open)$(d).close(); }); show('home'); });
+$('btn-quit').addEventListener('click',()=>{
+  ['d-score','d-handoff','d-over'].forEach(d=>{ if($(d).open)$(d).close(); });
+  if (S.challenge){ challengeFail(); return; }
+  cancelCount(); clearInterval(S.aiTimer); S.match=null; S.round=null; show('home'); });
 $('ds-continue').addEventListener('click',nextRound);
 $('dh-ready').addEventListener('click',()=>$('d-handoff').close());
 $('do-rematch').addEventListener('click',()=>{ $('d-over').close();

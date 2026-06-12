@@ -141,6 +141,52 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   $('auth-back').click();
   check('back returns home', !$('view-home').classList.contains('hidden'));
 
+  // ================= CHALLENGE MAP =================
+  win.__lifeMs = 300; // fast heart regrowth for the test
+  const CC = win.__cc;
+  $('tile-map').click();
+  check('map: opens with 24 level nodes', doc.querySelectorAll('.map-node').length === 24);
+  check('map: only level 1 unlocked', doc.querySelectorAll('.map-node.locked').length === 23);
+  check('map: five hearts shown', $('map-lives').textContent.includes('❤❤❤❤❤'));
+
+  // level intro dialog
+  doc.querySelector('.map-node[data-level="1"]').click();
+  check('map: level dialog explains the stake', $('d-level').open && $('dl-desc').textContent.includes('costs a life'));
+  $('dl-play').click();
+  check('map: challenge starts in the game view', !$('view-game').classList.contains('hidden') && $('g-round').textContent.includes('Level 1'));
+
+  // win via the hook (random play cannot reliably reach 29)
+  CC.challengeWin(3);
+  check('map: clear dialog with three stars', $('d-chal').open && $('dcr-stars').textContent === '★★★');
+  check('map: next level unlocked', CC.S.campaign.level === 2);
+  $('dcr-next').click();
+  check('map: next level launches level 2', $('g-round').textContent.includes('Level 2'));
+
+  // fail costs a heart; quitting also counts as a fail
+  CC.challengeFail();
+  check('map: fail costs a life', CC.S.campaign.lives === 4 && $('dcr-eyebrow').textContent.includes('−1'));
+  $('dcr-retry').click();
+  check('map: retry relaunches the level', $('g-round').textContent.includes('Level 2'));
+  $('btn-quit').click();
+  check('map: quitting mid-level is a fail', CC.S.campaign.lives === 3 && $('d-chal').open);
+  $('dcr-map').click();
+  check('map: back on the map after the result', !$('view-map').classList.contains('hidden'));
+
+  // run out of hearts: play locks behind the regrowth timer
+  CC.S.campaign.lives = 0; CC.S.campaign.lastLifeAt = Date.now();
+  CC.renderMap();
+  doc.querySelector('.map-node[data-level="2"]').click();
+  check('map: no lives means no play', $('dl-play').disabled);
+  $('dl-close').click();
+  await sleep(350); // one regrowth window at 300ms
+  CC.refreshLives();
+  check('map: a heart regrows after the window', CC.S.campaign.lives === 1);
+  CC.renderMap();
+  doc.querySelector('.map-node[data-level="2"]').click();
+  check('map: play unlocked again with the new heart', !$('dl-play').disabled);
+  $('dl-close').click();
+  $('map-back').click();
+
   console.log(fails === 0 ? '\nSMOKE TEST PASSED' : `\n${fails} FAILURES`);
   process.exit(fails ? 1 : 0);
 })().catch(e => { console.error('CRASH:', e); process.exit(1); });

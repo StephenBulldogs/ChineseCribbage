@@ -22,6 +22,12 @@ Just open `index.html` in a browser. To host it, drop the file on any static hos
 
 Keyboard play: press **1–5** to place the current card into a row.
 
+## Challenge map
+
+A Candy Crush style campaign: a winding map of **24 levels** with three challenge types that escalate. Solo sprints (reach 29 within 8 rounds, shrinking to a brutal 2), single-hand hunts (score 35+ in one round, climbing to 60+), and AI duels (the Deckhand, then the Navigator, then the Captain, with growing head starts up to 25 points). Levels unlock in order; each clear awards **1 to 3 stars** by margin (rounds to spare, points over target, or final lead).
+
+**Lives:** you have 5 hearts. Failing a level costs one, and quitting mid-level counts as a fail. One heart regrows every **30 minutes** (the map shows a live countdown), and you cannot start a level with no hearts. Progress (unlocked level, stars, hearts, regrow timer) saves to your account when signed in via the online tab; otherwise it lasts for the browser session.
+
 ## Accounts, stats, friends & challenges
 
 - **Sign-in** gates online play: **Continue with Google** (popup) or **Play as guest**. Guest is a plain local session: one tap, a session id generated in the browser, no auth provider, no username or password. Guests can pick a display name (or get Guest-XXXX) and rename later from their profile. A guest identity lasts for the browser session; rejoining a table after a full restart still works through the same-name-plus-code path. The Firebase Auth SDK is only loaded if someone actually clicks the Google button.
