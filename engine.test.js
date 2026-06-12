@@ -52,6 +52,26 @@ eq('higher total wins', m.outcome, { kind: 'win', player: 1 });
 let m2 = E.newMatch(0); m2 = E.applyRoundNet(m2, 29); m2 = E.applyRoundNet(m2, 29);
 eq('tie', m2.outcome.kind, 'tie');
 
+// Detail scoring must always agree with scoreHand, card-for-card
+let detailOk = true, comboIdxOk = true;
+{
+  const rng = E.mulberry32(7);
+  for (let n = 0; n < 300; n++) {
+    const deck = E.shuffle(E.freshDeck(), rng);
+    const hand = deck.slice(0, 4), starter = deck[4];
+    const isCrib = n % 2 === 0;
+    const det = E.scoreHandDetail(hand, starter, isCrib);
+    if (det.total !== E.scoreHand(hand, starter, isCrib).total) detailOk = false;
+    for (const c of det.combos) if (!c.idx.every(i => i >= 0 && i <= 4)) comboIdxOk = false;
+  }
+}
+eq('detail totals match scoreHand over 300 random hands', detailOk, true);
+eq('detail combos reference valid card indices', comboIdxOk, true);
+// Spot-check: 4,4,5,6 + K → two fifteens, one pair, two runs of 3
+const det = E.scoreHandDetail([c(4,'H'),c(4,'D'),c(5,'C'),c(6,'S')], c(13,'H'));
+eq('double-run detail: 6 combos (three fifteens, pair, two runs)', det.combos.length, 6);
+eq('double-run detail: two runs', det.combos.filter(x=>x.kind==='run').length, 2);
+
 for (const d of ['easy','medium','hard']) {
   let ar = E.newRound(999), g = 0;
   while (!ar.complete && g++ < 20) ar = E.placeCard(ar, E.aiChooseRow(ar, d));

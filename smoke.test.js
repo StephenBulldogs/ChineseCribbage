@@ -2,6 +2,7 @@ const { JSDOM } = require('jsdom');
 const html = require('fs').readFileSync('index.html', 'utf8');
 const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true });
 const { window } = dom;
+  const win = window;
 const doc = window.document;
 
 // jsdom lacks <dialog> showModal — shim it
@@ -14,7 +15,30 @@ const $ = (id) => doc.getElementById(id);
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 (async () => {
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const waitFor = async (fn, ms) => { const t0 = Date.now();
+    while (Date.now() - t0 < ms) { if (fn()) return true; await sleep(40); } return fn(); };
   check('home visible at load', !$('view-home').classList.contains('hidden'));
+
+  // ---- the slow count + skip (normal speed) ----
+  $('tile-solo').click();
+  let p = 0;
+  while (p++ < 14) {
+    const b = doc.querySelector('#g-rows .row-btn:not([disabled])');
+    if (!b) break; b.click();
+  }
+  await waitFor(() => $('g-callout').innerHTML.includes('count-callout'), 2000);
+  check('count: callout appears after the starter flips', $('g-callout').innerHTML.includes('count-callout'));
+  await waitFor(() => doc.querySelector('#g-rows .card.glow') !== null, 3000);
+  check('count: combination cards glow', doc.querySelector('#g-rows .card.glow') !== null);
+  check('count: rows are not clickable during the count', doc.querySelector('#g-rows .row-btn:not([disabled])') === null);
+  check('count: skip button present', $('g-skip') !== null);
+  $('g-skip').click();
+  await waitFor(() => $('d-score').open, 1000);
+  check('count: skip jumps straight to the score sheet', $('d-score').open);
+  $('ds-continue').click();
+  $('btn-quit').click();
+  win.__fastCount = true; // animations near-instant for the rest of the suite
 
   // ---- rules info dialog ----
   $('btn-info').click();
@@ -28,10 +52,11 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   check('solo: game opens', !$('view-game').classList.contains('hidden'));
   check('solo: single lane on the rail', doc.querySelectorAll('#g-rail .lane-row').length === 1);
   let soloSafety = 0, soloPlacements = 0;
-  while (!$('d-score').open && soloSafety++ < 25) {
+  while (soloSafety++ < 25) {
     const b = doc.querySelector('#g-rows .row-btn:not([disabled])');
     if (!b) break; b.click(); soloPlacements++;
   }
+  await waitFor(() => $('d-score').open, 3000);
   check('solo: round completes in 12 placements', $('d-score').open && soloPlacements === 12);
   check('count: every row shows its breakdown', doc.querySelectorAll('#g-rows .row-break').length === 5);
   check('count: score sheet itemizes all 5 hands', doc.querySelectorAll('#ds-hands .ds-row').length === 5);
@@ -55,11 +80,12 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   check('crib button is disabled', doc.querySelector('#g-rows .row-btn.crib').disabled);
   // play my round: always click first enabled row — should take exactly 12 placements
   let safety = 0, placements = 0;
-  while (!$('d-score').open && safety++ < 25) {
+  while (safety++ < 25) {
     const b = doc.querySelector('#g-rows .row-btn:not([disabled])');
     if (!b) break;
     b.click(); placements++;
   }
+  await waitFor(() => $('d-score').open, 3000);
   check('score sheet opens after exactly 12 placements', $('d-score').open && placements === 12);
   check('crib revealed at the count', doc.querySelector('#g-rows .row-btn.crib .card.back') === null);
   check('score line shows − 29', $('ds-line').textContent.includes('29'));
@@ -77,12 +103,13 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
   // keyboard placement: keys 1-4 only
   safety = 0;
-  while (!$('d-score').open && safety++ < 30) {
-    for (const k of ['1','2','3','4']) {
+  let kdone = false;
+  while (!kdone && safety++ < 30) {
+    for (const k of ['1','2','3','4'])
       doc.dispatchEvent(new window.KeyboardEvent('keydown', { key: k, bubbles: true }));
-      if ($('d-score').open) break;
-    }
+    kdone = doc.querySelector('#g-rows .row-btn:not([disabled])') === null;
   }
+  await waitFor(() => $('d-score').open, 3000);
   check('keyboard-only round completes with keys 1-4', $('d-score').open);
 
   // quit cleanly mid-match
@@ -93,10 +120,11 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   // pass & play handoff
   $('tile-pass').click();
   safety = 0;
-  while (!$('d-score').open && safety++ < 25) {
+  while (safety++ < 25) {
     const b = doc.querySelector('#g-rows .row-btn:not([disabled])');
-    if (b) b.click();
+    if (b) b.click(); else break;
   }
+  await waitFor(() => $('d-score').open, 3000);
   $('ds-continue').click();
   check('handoff dialog appears in pass mode', $('d-handoff').open);
   check('handoff names Player 2', $('dh-name').textContent === 'Player 2');

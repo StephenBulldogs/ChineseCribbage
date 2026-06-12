@@ -81,6 +81,56 @@ function scoreHand(hand, starter, isCrib = false) {
   return { fifteens, pairs, runs, flush, nobs, total };
 }
 
+/**
+ * Detailed show: every scoring combination with the indices of the cards
+ * involved (0-3 = hand cards in order, 4 = starter). Drives the animated
+ * count at the end of a round. Totals always match scoreHand.
+ */
+function scoreHandDetail(hand, starter, isCrib = false) {
+  const all = hand.concat([starter]);
+  const combos = [];
+  for (let mask = 1; mask < 32; mask++) {
+    let sum = 0; const idx = [];
+    for (let i = 0; i < 5; i++) if (mask & (1 << i)) { sum += cardValue(all[i]); idx.push(i); }
+    if (sum === 15) combos.push({ kind: 'fifteen', idx, pts: 2 });
+  }
+  for (let i = 0; i < 5; i++)
+    for (let j = i + 1; j < 5; j++)
+      if (all[i].rank === all[j].rank) combos.push({ kind: 'pair', idx: [i, j], pts: 2 });
+  const byRank = new Map();
+  for (let i = 0; i < 5; i++) {
+    const r = all[i].rank;
+    if (!byRank.has(r)) byRank.set(r, []);
+    byRank.get(r).push(i);
+  }
+  const ranks = [...byRank.keys()].sort((a, b) => a - b);
+  let i = 0;
+  while (i < ranks.length) {
+    let j = i;
+    while (j + 1 < ranks.length && ranks[j + 1] === ranks[j] + 1) j++;
+    const len = j - i + 1;
+    if (len >= 3) {
+      let acc = [[]];
+      for (let k = i; k <= j; k++) {
+        const next = [];
+        for (const partial of acc) for (const ix of byRank.get(ranks[k])) next.push(partial.concat([ix]));
+        acc = next;
+      }
+      for (const idx of acc) combos.push({ kind: 'run', idx, pts: len });
+    }
+    i = j + 1;
+  }
+  const suit = hand[0].suit;
+  if (hand.every((c) => c.suit === suit)) {
+    if (starter.suit === suit) combos.push({ kind: 'flush', idx: [0, 1, 2, 3, 4], pts: 5 });
+    else if (!isCrib) combos.push({ kind: 'flush', idx: [0, 1, 2, 3], pts: 4 });
+  }
+  for (let k = 0; k < 4; k++)
+    if (hand[k].rank === 11 && hand[k].suit === starter.suit) combos.push({ kind: 'nobs', idx: [k, 4], pts: 1 });
+  const total = combos.reduce((n, c) => n + c.pts, 0);
+  return { combos, total };
+}
+
 // --- Round ---
 // The first five cards deal themselves: one to each hand, one FACE DOWN to
 // the crib. The player places only into hands; no hand may hold more than
@@ -230,7 +280,7 @@ function aiChooseRow(s, difficulty) {
 const CCEngine = {
   SUIT_GLYPHS, PAR, TARGET, CRIB_ROW, ROW_SIZE,
   cardValue, rankLabel, freshDeck, mulberry32, shuffle, randomSeed,
-  scoreHand, newRound, canPlace, placeCard, scoreRound, maxHandSize,
+  scoreHand, scoreHandDetail, newRound, canPlace, placeCard, scoreRound, maxHandSize,
   newMatch, applyRoundNet, aiChooseRow,
 };
 if (typeof module !== 'undefined') module.exports = CCEngine;
