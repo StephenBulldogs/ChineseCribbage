@@ -81,15 +81,15 @@
 
   .card{display:inline-flex;align-items:center;justify-content:center;position:relative;
     background:var(--cream);border:1px solid #00000022;border-radius:8px;user-select:none}
-  .card.lg{width:78px;height:110px;font-size:26px}
-  .card.sm{width:44px;height:62px;font-size:16px}
+  .card.lg{width:96px;height:134px;font-size:32px}
+  .card.sm{width:58px;height:82px;font-size:20px}
   .card .pip{font-weight:600}
   .card .corner{position:absolute;top:3px;left:5px;font-size:.6em;font-weight:700}
   .card.red{color:var(--ink-red)} .card.black{color:var(--ink-black)}
   .card.back{background:var(--brass-dim)}
   .card.back::after{content:"";position:absolute;inset:4px;border:2px solid #F3E9D755;border-radius:5px}
   .slot{display:inline-block;border:1.5px dashed var(--lacquer-edge);border-radius:8px;background:#1F100E66}
-  .slot.sm{width:44px;height:62px}
+  .slot.sm{width:58px;height:82px}
   .deal-in{animation:dealIn .22s cubic-bezier(.2,.8,.3,1)}
   @keyframes dealIn{from{transform:translateY(-8px) scale(.92);opacity:0}to{transform:none;opacity:1}}
   @media (prefers-reduced-motion: reduce){.deal-in{animation:none}.peg{transition:none}}
@@ -132,6 +132,17 @@
   @keyframes spin{to{transform:rotate(360deg)}}
   .wait-center{text-align:center;padding:48px 0;color:var(--cream-dim)}
 
+  .row-break{font-size:10px;color:var(--cream-dim);line-height:1.35;margin-top:2px;max-width:90px}
+  .ds-hands{margin:14px 0 4px;border-top:1px solid var(--lacquer-edge)}
+  .ds-row{display:flex;align-items:baseline;gap:10px;padding:7px 0;border-bottom:1px solid var(--lacquer-edge);font-size:13px}
+  .ds-row .nm{width:56px;color:var(--cream-dim);font-weight:700;font-size:11px;letter-spacing:.6px;text-transform:uppercase;flex:none}
+  .ds-row .bd{flex:1;color:var(--cream-dim)}
+  .ds-row b{font-family:var(--display);font-size:17px}
+  #d-rules{max-width:460px}
+  #d-rules .body{max-height:62vh;overflow-y:auto;padding-right:6px}
+  #d-rules h4{font-family:var(--display);font-size:16px;color:var(--brass);margin:14px 0 4px}
+  #d-rules h4:first-child{margin-top:0}
+  #d-rules p{color:var(--cream-dim);font-size:13px;line-height:1.6}
   .hidden{display:none !important}
   footer{margin-top:64px;color:var(--cream-dim);font-size:12px;border-top:1px solid var(--lacquer-edge);padding-top:20px;line-height:1.7}
   footer code{color:var(--cream);background:var(--lacquer-deep);padding:1px 6px;border-radius:4px}
@@ -167,8 +178,10 @@
   @media (max-width:560px){
     .lane-row{grid-template-columns:64px 1fr 38px}
     .rail-scale{padding-left:74px;padding-right:38px}
-    .row-btn{grid-template-columns:64px 1fr}
-    .card.lg{width:64px;height:90px;font-size:22px}
+    .row-btn{grid-template-columns:58px 1fr}
+    .card.lg{width:78px;height:110px;font-size:26px}
+    .card.sm,.slot.sm{width:48px;height:68px}
+    .card.sm{font-size:17px}
   }
 </style>
 </head>
@@ -176,7 +189,10 @@
 <div class="wrap">
   <header>
     <div class="wordmark">Chinese <span>Cribbage</span></div>
-    <button class="btn-ghost btn hidden" id="btn-quit">Quit match</button>
+    <div style="display:flex;gap:10px">
+      <button class="btn-ghost btn" id="btn-info" aria-haspopup="dialog">&#9432; rules</button>
+      <button class="btn-ghost btn hidden" id="btn-quit">Quit match</button>
+    </div>
   </header>
 
   <!-- ============ HOME ============ -->
@@ -184,19 +200,18 @@
     <section class="hero">
       <div class="kicker">FIVE HANDS · ONE STARTER · PAR 29</div>
       <h1>Twenty cards.<br>Place them well.</h1>
-      <p>Place your cards into four hands while the crib deals itself face down, flip the starter, and count every row like a cribbage hand. Beat par and you peg up the rail. Miss it and you peg backwards. First past 29 —
-         after equal rounds — takes the match.</p>
+      <p>Five cribbage hands, par 29. First one home wins.</p>
     </section>
 
     <div class="tiles">
       <button class="tile" id="tile-solo">
         <h2>Solo run</h2>
-        <p>The original kitchen-table game: just you against the deck. Reach 29 in as few rounds as you can.</p>
+        <p>You against the deck — reach 29 fast.</p>
         <span class="tag">PLAYS OFFLINE</span>
       </button>
       <button class="tile" id="tile-ai">
         <h2>Versus AI</h2>
-        <p>Race the house opponent to 29. Three difficulties, from a careless Deckhand to a Monte-Carlo Captain.</p>
+        <p>Race the house to 29.</p>
         <div class="diff" id="diff-picker" role="group" aria-label="AI difficulty">
           <span class="pill" role="button" tabindex="0" data-d="easy" aria-pressed="false">easy</span>
           <span class="pill" role="button" tabindex="0" data-d="medium" aria-pressed="true">medium</span>
@@ -206,32 +221,17 @@
       </button>
       <button class="tile" id="tile-pass">
         <h2>Pass &amp; play</h2>
-        <p>Two players, one screen. Hand the device over between rounds — the score sheet keeps everyone honest.</p>
+        <p>Two players, one screen.</p>
         <span class="tag">PLAYS OFFLINE</span>
       </button>
       <button class="tile" id="tile-online">
         <h2>Online duel</h2>
-        <p>Tables for 2–4 players — fill empty seats with AI if you like. Public tables anyone can join, or private rooms by code. Watch every player's placements live while you wait your turn.</p>
+        <p>2–4 players · AI seat-fillers · live tables.</p>
         <span class="tag">NEEDS A CONNECTION</span>
       </button>
     </div>
 
-    <section class="rules">
-      <div><h3>The deal</h3><p>The first five cards deal themselves — one to each hand and one, face down, to the crib. After that, you place each drawn card into a hand of your choice. Never the crib, and once a card is placed, it stays.</p></div>
-      <div><h3>The crib feeds itself</h3><p>No hand may hold more than one card beyond the crib. Each time all four hands catch up, the next card deals itself, face down, into the crib — and you only see it when it's time to count.</p></div>
-      <div><h3>The starter</h3><p>When the rows are full, a starter is flipped. It counts as the fifth card in every row, just as in regular cribbage.</p></div>
-      <div><h3>Scoring</h3><p>Fifteens score 2, pairs 2, runs their length, four of a suit a flush (the crib needs all five), and a jack matching the starter suit is a nob.</p></div>
-      <div><h3>Par is 29</h3><p>Total all five rows, subtract 29. Over par pegs you up; under par pegs you down — totals can go negative.</p></div>
-      <div><h3>Winning</h3><p>The match ends only when both players have played equal rounds and someone has 29 or more. If your opponent gets there first, you still get your answer round. Highest total wins; equal totals are a tie.</p></div>
-      <div><h3>Tips</h3><p>Fives are gold — every face card pairs with them for fifteen. Keep one row loose early as a dumping ground, and remember the crib scores too.</p></div>
-    </section>
 
-    <footer>
-      Solo, AI and pass-and-play run entirely in your browser — no account, no server. Online duels are turn-based with
-      a fresh shuffle per player; while you wait, you watch your opponent place every card live. Tables can be public
-      (listed for anyone) or private (code only), and you can rejoin a match after a dropped connection with the same
-      name and code.
-    </footer>
   </main>
 
   <!-- ============ GAME ============ -->
@@ -241,7 +241,7 @@
     <div class="draw">
       <div>
         <div class="label" id="g-draw-label">You to place</div>
-        <div class="sub" id="g-draw-sub">Tap a hand — or press 1–4 — to place this card. The crib deals itself.</div>
+        <div class="sub" id="g-draw-sub">Tap a hand or press 1–4.</div>
       </div>
       <div id="g-draw-card"></div>
     </div>
@@ -252,7 +252,7 @@
   <main id="view-online" class="hidden">
     <div class="online-box" id="o-lobby">
       <h2>Online duel</h2>
-      <p>Turn-based, like playing across the table: you play your round with your own fresh shuffle while your opponent waits, then they play theirs.</p>
+      <p>Turn-based · fresh shuffle every round.</p>
       <div class="field"><input type="text" id="o-name" maxlength="16" placeholder="Your name"></div>
       <div class="size-row" role="group" aria-label="Number of players">
         <span class="pill" role="button" tabindex="0" data-n="2" aria-pressed="true">2 players</span>
@@ -274,8 +274,6 @@
         <h3>Open tables</h3>
         <div id="o-public"><div class="pub-empty">Looking for open tables…</div></div>
       </div>
-      <div class="hint">Lost your connection mid-match? Enter the <strong>same name</strong> and your room code (or tap your
-        table above) and you'll be put right back in your seat, cards restored.</div>
       <button class="btn btn-ghost" id="o-back" style="width:100%;margin-top:16px">Back</button>
     </div>
     <div class="online-box hidden" id="o-setup">
@@ -305,8 +303,39 @@
   </main>
 
   <!-- ============ DIALOGS ============ -->
+  <dialog id="d-rules">
+    <div class="d-eyebrow">How to play</div>
+    <div class="body">
+      <h4>The deal</h4>
+      <p>The first five cards deal themselves — one to each of the four hands, one face down to the crib. You place every
+         card after that into a hand of your choice. Never the crib; once placed, a card stays.</p>
+      <h4>The crib feeds itself</h4>
+      <p>No hand may hold more than one card beyond the crib. Each time all four hands catch up, the next card deals
+         itself face down into the crib. You only see it at the count.</p>
+      <h4>The count</h4>
+      <p>When all twenty cards are out, a starter flips and counts in every row. Fifteens score 2, pairs 2, runs their
+         length, four of a suit a flush (the crib needs all five), a jack matching the starter suit is a nob.</p>
+      <h4>Par is 29</h4>
+      <p>Total all five rows, subtract 29. Over par pegs you up the rail; under pegs you backwards — totals can go negative.</p>
+      <h4>Winning</h4>
+      <p>Everyone plays the same number of rounds. The match ends once rounds are equal and someone has 29 or more —
+         if a rival gets there first, you still get your answer round. Highest total wins; equal totals tie.</p>
+      <h4>Online tables</h4>
+      <p>2–4 players, turn-based in seat order, each with their own fresh shuffle. Empty seats can be filled with AI
+         (played by the host's device — the table waits if the host is offline). Public tables are listed for anyone;
+         private rooms use a five-letter code. While you wait, you watch the active player place every card live.</p>
+      <h4>Dropped connection?</h4>
+      <p>Your seat is held. Rejoin with the <strong>same name</strong> and room code — or tap your table in the lobby —
+         and your half-played round comes back exactly as you left it.</p>
+      <h4>Tips</h4>
+      <p>Fives are gold — every face card makes fifteen with them. Keep one hand loose early as a dumping ground, and
+         remember the hidden crib counts too.</p>
+    </div>
+    <button class="btn btn-primary" id="dr-close">Close</button>
+  </dialog>
   <dialog id="d-score">
     <div class="d-eyebrow" id="ds-eyebrow">Round complete</div>
+    <div class="ds-hands" id="ds-hands"></div>
     <div class="d-big" id="ds-line"></div>
     <div class="d-sub" id="ds-sub"></div>
     <button class="btn btn-primary" id="ds-continue">Continue</button>
@@ -314,7 +343,7 @@
   <dialog id="d-handoff">
     <div class="d-eyebrow">Pass the device</div>
     <div class="d-big" id="dh-name"></div>
-    <div class="d-sub">Your round. No peeking by the other player.</div>
+    <div class="d-sub">Your round — no peeking.</div>
     <button class="btn btn-primary" id="dh-ready">I'm ready</button>
   </dialog>
   <dialog id="d-over">
@@ -664,11 +693,21 @@ function rowsHTML(round, placeableFn, rowScores){
     return `<button class="row-btn ${isCrib?'crib':''} ${placeable?'placeable':''}"
       data-row="${i}" ${placeable?'':'disabled'} aria-label="${isCrib?'Crib — deals itself':'Place card in '+ROW_LABELS[i]}">
       <div><div class="row-label">${ROW_LABELS[i]}${badge}</div>
-        ${score?`<div class="row-score ${score.total===0?'zero':''}">${score.total}</div>`:''}</div>
+        ${score?`<div class="row-score ${score.total===0?'zero':''}">${score.total}</div><div class="row-break">${breakdownHTML(score)}</div>`:''}</div>
       <div class="row-cards">
         ${[0,1,2,3].map(k=>cards[k]?cardHTML(cards[k],'sm',hideFaces,k===cards.length-1):'<span class="slot sm"></span>').join('')}
       </div></button>`;
   }).join('');
+}
+function breakdownHTML(sc){
+  if(!sc) return '';
+  const parts=[];
+  if(sc.fifteens) parts.push('fifteens '+sc.fifteens);
+  if(sc.pairs) parts.push('pairs '+sc.pairs);
+  if(sc.runs) parts.push('runs '+sc.runs);
+  if(sc.flush) parts.push('flush '+sc.flush);
+  if(sc.nobs) parts.push('nobs '+sc.nobs);
+  return parts.length?parts.join(' &middot; '):'no count';
 }
 const esc=(s)=>String(s).replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
@@ -707,7 +746,7 @@ function renderGame(){
     $('g-draw-card').innerHTML=cardHTML(r.starter,'lg',false,true);
   } else {
     $('g-draw-label').textContent= S.mode==='solo' ? 'Your card' : `${S.players[seat].name} to place`;
-    $('g-draw-sub').textContent= humanTurn ? 'Tap a hand — or press 1–4 — to place this card. The crib deals itself.' : `${S.players[seat].name} is thinking…`;
+    $('g-draw-sub').textContent= humanTurn ? 'Tap a hand or press 1–4.' : `${S.players[seat].name} is thinking…`;
     $('g-draw-card').innerHTML=cardHTML(r.current,'lg',!humanTurn && S.mode==='pass',true);
   }
   $('g-rows').innerHTML = rowsHTML(r,(i)=>humanTurn && E.canPlace(r,i),rowScores);
@@ -726,6 +765,8 @@ function onRoundComplete(){
   const result=E.scoreRound(S.round);
   S.lastResult={result,seat:S.match.turn};
   const {handTotal,net}=result;
+  $('ds-hands').innerHTML=result.rowScores.map((sc,i)=>
+    `<div class="ds-row"><span class="nm">${ROW_LABELS[i]}</span><span class="bd">${breakdownHTML(sc)}</span><b>${sc.total}</b></div>`).join('');
   $('ds-eyebrow').textContent= S.mode==='solo' ? 'Round complete' : `${esc(S.players[S.match.turn].name)} · round complete`;
   $('ds-line').innerHTML=`${handTotal} <span class="dim">− 29 =</span> <span class="${net>=0?'pos':'neg'}">${net>=0?'+':''}${net}</span>`;
   $('ds-sub').textContent= net>=0 ? 'Pegging up the rail.' : 'Under par — pegging backwards.';
@@ -1090,7 +1131,7 @@ function renderOnline(){
     const rowScores=r.complete?E.scoreRound(r).rowScores:null;
     const head = r.complete
       ? `<div class="draw"><div><div class="label">Starter</div><div class="sub">Counts in all five hands.</div></div>${cardHTML(r.starter,'lg',false,true)}</div>`
-      : `<div class="draw"><div><div class="label">Your card</div><div class="sub">Your shuffle, your round — tap a hand or press 1–4. The crib deals itself. The table is watching live.</div></div>${cardHTML(r.current,'lg',false,true)}</div>`;
+      : `<div class="draw"><div><div class="label">Your card</div><div class="sub">Tap a hand or press 1–4 — the table is watching.</div></div>${cardHTML(r.current,'lg',false,true)}</div>`;
     const submit = r.complete
       ? `<button class="btn btn-primary" id="o-submit" style="width:100%;margin-top:6px">Submit ${E.scoreRound(r).net>=0?'+':''}${E.scoreRound(r).net}</button>` : '';
     $('o-play').innerHTML=head+rowsHTML(r,(i)=>E.canPlace(r,i),rowScores)+submit;
@@ -1128,8 +1169,8 @@ function renderOnline(){
     const head=lr.complete
       ? `<div class="draw"><div><div class="label">${esc(liveName)}'s starter</div><div class="sub">Counting up their five hands…</div></div>${cardHTML(lr.starter,'lg',false,true)}</div>`
       : liveOff
-        ? `<div class="draw"><div><div class="label">${esc(liveName)} disconnected<span class="live-badge" style="background:var(--brass-dim)">SEAT HELD</span></div><div class="sub">Their board is frozen where they left it — the table waits, and they can rejoin with the same name and code to pick it right back up.</div></div>${cardHTML(lr.current,'lg',false,true)}</div>`
-        : `<div class="draw"><div><div class="label">${esc(liveName)} is placing<span class="live-badge">LIVE</span></div><div class="sub">Their shuffle, their round — every move shows here as they make it.</div></div>${cardHTML(lr.current,'lg',false,true)}</div>`;
+        ? `<div class="draw"><div><div class="label">${esc(liveName)} disconnected<span class="live-badge" style="background:var(--brass-dim)">SEAT HELD</span></div><div class="sub">Board frozen — they can rejoin with the same name and code.</div></div>${cardHTML(lr.current,'lg',false,true)}</div>`
+        : `<div class="draw"><div><div class="label">${esc(liveName)} is placing<span class="live-badge">LIVE</span></div><div class="sub">Every move shows as they make it.</div></div>${cardHTML(lr.current,'lg',false,true)}</div>`;
     $('o-spectate').innerHTML=head+rowsHTML(lr,()=>false,rowScores);
     $('o-waiting').classList.add('hidden');
   } else {
@@ -1176,6 +1217,8 @@ $('dh-ready').addEventListener('click',()=>$('d-handoff').close());
 $('do-rematch').addEventListener('click',()=>{ $('d-over').close();
   if(S.view==='online'){ leaveRoom(); openOnline(); } else startMatch(S.mode); });
 $('do-home').addEventListener('click',()=>{ $('d-over').close(); if(S.view==='online') leaveRoom(); else { S.match=null; show('home'); } });
+$('btn-info').addEventListener('click',()=>$('d-rules').showModal());
+$('dr-close').addEventListener('click',()=>$('d-rules').close());
 $('o-create').addEventListener('click',oCreate);
 $('o-join').addEventListener('click',()=>joinByCode($('o-code').value.trim().toUpperCase()));
 $('o-back').addEventListener('click',()=>show('home'));

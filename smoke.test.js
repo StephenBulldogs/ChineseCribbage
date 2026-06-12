@@ -16,6 +16,13 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 (async () => {
   check('home visible at load', !$('view-home').classList.contains('hidden'));
 
+  // ---- rules info dialog ----
+  $('btn-info').click();
+  check('info button opens the rules dialog', $('d-rules').open);
+  check('rules dialog covers the crib rule', $('d-rules').textContent.includes('crib'));
+  $('dr-close').click();
+  check('rules dialog closes', !$('d-rules').open);
+
   // ---- solo mode ----
   $('tile-solo').click();
   check('solo: game opens', !$('view-game').classList.contains('hidden'));
@@ -26,6 +33,9 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     if (!b) break; b.click(); soloPlacements++;
   }
   check('solo: round completes in 12 placements', $('d-score').open && soloPlacements === 12);
+  check('count: every row shows its breakdown', doc.querySelectorAll('#g-rows .row-break').length === 5);
+  check('count: score sheet itemizes all 5 hands', doc.querySelectorAll('#ds-hands .ds-row').length === 5);
+  check('count: breakdown names the combinations', /fifteens|pairs|runs|flush|nobs|no count/.test($('ds-hands').textContent));
   $('ds-continue').click();
   check('solo: next round or finish flows on', $('d-over').open || $('g-round').textContent === 'Round 2');
   if ($('d-over').open) $('do-home').click(); else $('btn-quit').click();

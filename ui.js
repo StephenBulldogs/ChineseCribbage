@@ -59,11 +59,21 @@ function rowsHTML(round, placeableFn, rowScores){
     return `<button class="row-btn ${isCrib?'crib':''} ${placeable?'placeable':''}"
       data-row="${i}" ${placeable?'':'disabled'} aria-label="${isCrib?'Crib — deals itself':'Place card in '+ROW_LABELS[i]}">
       <div><div class="row-label">${ROW_LABELS[i]}${badge}</div>
-        ${score?`<div class="row-score ${score.total===0?'zero':''}">${score.total}</div>`:''}</div>
+        ${score?`<div class="row-score ${score.total===0?'zero':''}">${score.total}</div><div class="row-break">${breakdownHTML(score)}</div>`:''}</div>
       <div class="row-cards">
         ${[0,1,2,3].map(k=>cards[k]?cardHTML(cards[k],'sm',hideFaces,k===cards.length-1):'<span class="slot sm"></span>').join('')}
       </div></button>`;
   }).join('');
+}
+function breakdownHTML(sc){
+  if(!sc) return '';
+  const parts=[];
+  if(sc.fifteens) parts.push('fifteens '+sc.fifteens);
+  if(sc.pairs) parts.push('pairs '+sc.pairs);
+  if(sc.runs) parts.push('runs '+sc.runs);
+  if(sc.flush) parts.push('flush '+sc.flush);
+  if(sc.nobs) parts.push('nobs '+sc.nobs);
+  return parts.length?parts.join(' &middot; '):'no count';
 }
 const esc=(s)=>String(s).replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
@@ -102,7 +112,7 @@ function renderGame(){
     $('g-draw-card').innerHTML=cardHTML(r.starter,'lg',false,true);
   } else {
     $('g-draw-label').textContent= S.mode==='solo' ? 'Your card' : `${S.players[seat].name} to place`;
-    $('g-draw-sub').textContent= humanTurn ? 'Tap a hand — or press 1–4 — to place this card. The crib deals itself.' : `${S.players[seat].name} is thinking…`;
+    $('g-draw-sub').textContent= humanTurn ? 'Tap a hand or press 1–4.' : `${S.players[seat].name} is thinking…`;
     $('g-draw-card').innerHTML=cardHTML(r.current,'lg',!humanTurn && S.mode==='pass',true);
   }
   $('g-rows').innerHTML = rowsHTML(r,(i)=>humanTurn && E.canPlace(r,i),rowScores);
@@ -121,6 +131,8 @@ function onRoundComplete(){
   const result=E.scoreRound(S.round);
   S.lastResult={result,seat:S.match.turn};
   const {handTotal,net}=result;
+  $('ds-hands').innerHTML=result.rowScores.map((sc,i)=>
+    `<div class="ds-row"><span class="nm">${ROW_LABELS[i]}</span><span class="bd">${breakdownHTML(sc)}</span><b>${sc.total}</b></div>`).join('');
   $('ds-eyebrow').textContent= S.mode==='solo' ? 'Round complete' : `${esc(S.players[S.match.turn].name)} · round complete`;
   $('ds-line').innerHTML=`${handTotal} <span class="dim">− 29 =</span> <span class="${net>=0?'pos':'neg'}">${net>=0?'+':''}${net}</span>`;
   $('ds-sub').textContent= net>=0 ? 'Pegging up the rail.' : 'Under par — pegging backwards.';
@@ -485,7 +497,7 @@ function renderOnline(){
     const rowScores=r.complete?E.scoreRound(r).rowScores:null;
     const head = r.complete
       ? `<div class="draw"><div><div class="label">Starter</div><div class="sub">Counts in all five hands.</div></div>${cardHTML(r.starter,'lg',false,true)}</div>`
-      : `<div class="draw"><div><div class="label">Your card</div><div class="sub">Your shuffle, your round — tap a hand or press 1–4. The crib deals itself. The table is watching live.</div></div>${cardHTML(r.current,'lg',false,true)}</div>`;
+      : `<div class="draw"><div><div class="label">Your card</div><div class="sub">Tap a hand or press 1–4 — the table is watching.</div></div>${cardHTML(r.current,'lg',false,true)}</div>`;
     const submit = r.complete
       ? `<button class="btn btn-primary" id="o-submit" style="width:100%;margin-top:6px">Submit ${E.scoreRound(r).net>=0?'+':''}${E.scoreRound(r).net}</button>` : '';
     $('o-play').innerHTML=head+rowsHTML(r,(i)=>E.canPlace(r,i),rowScores)+submit;
@@ -523,8 +535,8 @@ function renderOnline(){
     const head=lr.complete
       ? `<div class="draw"><div><div class="label">${esc(liveName)}'s starter</div><div class="sub">Counting up their five hands…</div></div>${cardHTML(lr.starter,'lg',false,true)}</div>`
       : liveOff
-        ? `<div class="draw"><div><div class="label">${esc(liveName)} disconnected<span class="live-badge" style="background:var(--brass-dim)">SEAT HELD</span></div><div class="sub">Their board is frozen where they left it — the table waits, and they can rejoin with the same name and code to pick it right back up.</div></div>${cardHTML(lr.current,'lg',false,true)}</div>`
-        : `<div class="draw"><div><div class="label">${esc(liveName)} is placing<span class="live-badge">LIVE</span></div><div class="sub">Their shuffle, their round — every move shows here as they make it.</div></div>${cardHTML(lr.current,'lg',false,true)}</div>`;
+        ? `<div class="draw"><div><div class="label">${esc(liveName)} disconnected<span class="live-badge" style="background:var(--brass-dim)">SEAT HELD</span></div><div class="sub">Board frozen — they can rejoin with the same name and code.</div></div>${cardHTML(lr.current,'lg',false,true)}</div>`
+        : `<div class="draw"><div><div class="label">${esc(liveName)} is placing<span class="live-badge">LIVE</span></div><div class="sub">Every move shows as they make it.</div></div>${cardHTML(lr.current,'lg',false,true)}</div>`;
     $('o-spectate').innerHTML=head+rowsHTML(lr,()=>false,rowScores);
     $('o-waiting').classList.add('hidden');
   } else {
@@ -571,6 +583,8 @@ $('dh-ready').addEventListener('click',()=>$('d-handoff').close());
 $('do-rematch').addEventListener('click',()=>{ $('d-over').close();
   if(S.view==='online'){ leaveRoom(); openOnline(); } else startMatch(S.mode); });
 $('do-home').addEventListener('click',()=>{ $('d-over').close(); if(S.view==='online') leaveRoom(); else { S.match=null; show('home'); } });
+$('btn-info').addEventListener('click',()=>$('d-rules').showModal());
+$('dr-close').addEventListener('click',()=>$('d-rules').close());
 $('o-create').addEventListener('click',oCreate);
 $('o-join').addEventListener('click',()=>joinByCode($('o-code').value.trim().toUpperCase()));
 $('o-back').addEventListener('click',()=>show('home'));
