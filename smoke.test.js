@@ -132,12 +132,13 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   check('card hidden is NOT in effect for active player', doc.querySelector('#g-draw-card .card.back') === null);
   $('btn-quit').click();
 
-  // online configured → lobby with public/private choice
+  // online configured → sign-in gate first
   $('tile-online').click();
-  check('online lobby shown (Firebase configured)', !$('o-lobby').classList.contains('hidden'));
+  check('online requires sign-in (auth panel shown)', !$('o-auth').classList.contains('hidden'));
+  check('Google + guest options, no passwords', $('auth-google') !== null && $('auth-guest') !== null);
   check('lobby has visibility pills', doc.querySelectorAll('.vis-row .pill').length === 2);
   check('lobby has an open-tables section', $('o-public') !== null);
-  $('o-back').click();
+  $('auth-back').click();
   check('back returns home', !$('view-home').classList.contains('hidden'));
 
   console.log(fails === 0 ? '\nSMOKE TEST PASSED' : `\n${fails} FAILURES`);

@@ -38,11 +38,21 @@ function makeFakeFirebase(client) {
     }),
   });
   dbFn.ServerValue = { TIMESTAMP: SERVER_TS };
-  return { initializeApp: () => {}, database: dbFn };
+  const authObj = {
+    onAuthStateChanged: (cb) => { client.authCb = cb; setTimeout(() => cb(client.user || null), 0); },
+    signInAnonymously: async () => { client.user = { uid: client.uid, isAnonymous: true, displayName: null };
+      client.authCb && client.authCb(client.user); },
+    signInWithPopup: async () => { client.user = { uid: client.uid, isAnonymous: false, displayName: client.googleName || 'Google User' };
+      client.authCb && client.authCb(client.user); },
+    signOut: async () => { client.user = null; client.authCb && client.authCb(null); },
+  };
+  const authFn = () => authObj;
+  authFn.GoogleAuthProvider = class {};
+  return { initializeApp: () => {}, database: dbFn, auth: authFn };
 }
 
 function makeClient(takeoverMs) {
-  const client = { listeners: [], onDc: [] };
+  const client = { listeners: [], onDc: [], uid: 'u' + Math.random().toString(36).slice(2, 10) };
   const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true,
     beforeParse(window) {
       window.firebase = makeFakeFirebase(client);
@@ -74,6 +84,15 @@ const waitFor = async (fn, ms, step = 80) => { const t0 = Date.now();
 const faceUp = (doc) => doc.querySelectorAll('#o-play .row-btn:not(.crib) .card:not(.back)').length;
 const cribBacks = (doc) => doc.querySelectorAll('#o-play .row-btn.crib .card.back').length;
 
+const signInGuest = async (win, name) => {
+  const doc = win.document;
+  doc.getElementById('tile-online').click();
+  await sleep(60);
+  doc.getElementById('auth-name').value = name;
+  doc.getElementById('auth-guest').click();
+  await waitFor(() => !doc.getElementById('o-lobby').classList.contains('hidden'), 2000);
+};
+
 const playOut = async (win) => {
   const doc = win.document;
   let safety = 0;
@@ -92,19 +111,19 @@ const playOut = async (win) => {
   // ---------- host creates a 3-seat public table with an AI in seat 3 ----------
   const cA = makeClient(), A = cA.window;
   const $a = (id) => A.document.getElementById(id);
-  $a('tile-online').click(); await sleep(50);
+  await signInGuest(A, 'Anna');
+  check('A: signed in as guest, lobby shown', !$a('o-lobby').classList.contains('hidden'));
+  check('A: account bar shows Anna', $a('o-account').textContent.includes('Anna'));
   A.document.querySelector('.size-row .pill[data-n="3"]').click(); await sleep(20);
   A.document.querySelector('#o-seats .pill[data-seat="1"][data-cfg="medium"]').click(); await sleep(20);
-  $a('o-name').value = 'Anna';
-  $a('o-create').click(); await sleep(80);
+  $a('o-create').click(); await sleep(120);
   const code = $a('o-room-code').textContent.trim();
   check('room: 3 seats, AI in p2', getPath('rooms/'+code).size === 3 && getPath('rooms/'+code).players.p2.ai === true);
 
   // ---------- guest joins from the public list ----------
   const cB = makeClient(), B = cB.window;
   const $b = (id) => B.document.getElementById(id);
-  $b('tile-online').click(); await sleep(60);
-  $b('o-name').value = 'Ben';
+  await signInGuest(B, 'Ben');
   B.document.querySelector('#o-public [data-join]').click();
   await waitFor(() => (getPath('rooms/'+code)||{}).status === 'playing', 2000);
   check('room auto-starts when seats fill', getPath('rooms/'+code).status === 'playing');
@@ -117,9 +136,8 @@ const playOut = async (win) => {
   // Cara opens the lobby, sees the in-play table with a Watch button
   const cC = makeClient(50), C = cC.window; // 50ms takeover window for the test
   const $c = (id) => C.document.getElementById(id);
-  $c('tile-online').click(); await sleep(80);
+  await signInGuest(C, 'Cara');
   check("C: lobby shows Anna's table as watchable", $c('o-public').textContent.includes('in play') && $c('o-public').textContent.includes('Watch'));
-  $c('o-name').value = 'Cara';
   C.document.querySelector('#o-public [data-join]').click();
   await waitFor(() => !$c('o-game').classList.contains('hidden'), 2000);
   check('C: spectating the full table', $c('o-game-roster').textContent.includes('spectating'));
@@ -143,8 +161,8 @@ const playOut = async (win) => {
 
   const cB2 = makeClient(), B2 = cB2.window;
   const $b2 = (id) => B2.document.getElementById(id);
-  $b2('tile-online').click(); await sleep(50);
-  $b2('o-name').value = 'Ben'; $b2('o-code').value = code;
+  await signInGuest(B2, 'Ben');
+  $b2('o-code').value = code;
   $b2('o-join').click();
   await waitFor(() => $b2('o-play').children.length > 0, 2000);
   check('B2: quick rejoin restores 3 moves', faceUp(B2.document) === 7 && cribBacks(B2.document) === 1);
@@ -187,6 +205,51 @@ const playOut = async (win) => {
   check('A and C both reach the match-over dialog', $a('d-over').open && $c('d-over').open);
   console.log('INFO final:', JSON.stringify(final.totals), final.result, 'in', Object.keys(final.rounds).length, 'rounds');
 
-  console.log(fails === 0 ? '\nMULTIPLAYER V4 TEST PASSED' : `\n${fails} FAILURES`);
+  // ================= STATS, FRIENDS & CHALLENGES =================
+  const byName = (n) => Object.entries(store.users || {}).find(([, u]) => u.name === n);
+  const [aUid, aUser] = byName('Anna'), [cUid, cUser] = byName('Cara');
+  check('stats: Anna recorded a win + game played', aUser.stats.wins === 1 && aUser.stats.gamesPlayed === 1);
+  check('stats: fastest win and longest game tracked', aUser.stats.fastestWin > 0 && aUser.stats.longestGame >= aUser.stats.fastestWin);
+  check('stats: highest hand and total captured', aUser.stats.highestHand > 0 && aUser.stats.highestTotal >= aUser.stats.highestHand);
+  check('stats: Cara recorded the loss', cUser.stats.losses === 1 && cUser.stats.gamesPlayed === 1);
+
+  // leave the finished table
+  $a('do-home').click(); await sleep(60);
+  $c('do-home').click(); await sleep(60);
+
+  // own profile dialog
+  $a('tile-online').click(); await sleep(60);
+  $a('acct-profile').click();
+  await waitFor(() => $a('d-profile').open, 1500);
+  check('profile: own dialog shows all 9 stat tiles', A.document.querySelectorAll('#dp-stats .stat').length === 9);
+  check('profile: shows the friend code', $a('dp-sub').textContent.includes(aUser.friendCode));
+  $a('dp-close').click();
+
+  // add friend by code
+  $a('friend-code').value = cUser.friendCode;
+  $a('friend-add').click();
+  await waitFor(() => store.users[aUid].friends && store.users[aUid].friends[cUid], 2000);
+  check('friends: mutual add by code', !!store.users[cUid].friends[aUid]);
+  await waitFor(() => $a('o-friends-list').textContent.includes('Cara'), 2000);
+  check('friends: list shows Cara online', $a('o-friends-list').textContent.includes('online'));
+
+  // challenge: Anna → Cara
+  A.document.querySelector('#o-friends-list [data-chal]').click();
+  await waitFor(() => $c('d-challenge').open, 2500);
+  check('challenge: Cara receives the dialog', $c('dc-text').textContent.includes('Anna'));
+  $c('dc-accept').click();
+  const chalCode = () => Object.keys(store.rooms).find((k) => store.rooms[k].size === 2 && store.rooms[k].status !== 'done');
+  await waitFor(() => { const k = chalCode(); return k && store.rooms[k].status === 'playing'; }, 3000);
+  const ck = chalCode();
+  check('challenge: private 2-seat duel started', store.rooms[ck].visibility === 'private' && store.rooms[ck].players.p1.uid === cUid);
+  check('challenge: not listed publicly', !(store.publicRooms || {})[ck]);
+
+  // opponent profile from the roster while playing
+  await waitFor(() => A.document.querySelector('#o-game-roster [data-uid]') !== null, 2500);
+  A.document.querySelector('#o-game-roster [data-uid]').click();
+  await waitFor(() => $a('d-profile').open, 1500);
+  check('profile: opponent dialog shows Cara with friend toggle', $a('dp-name').textContent === 'Cara' && $a('dp-friend').textContent === 'Remove friend');
+
+  console.log(fails === 0 ? '\nMULTIPLAYER V5 TEST PASSED' : `\n${fails} FAILURES`);
   process.exit(fails ? 1 : 0);
 })().catch((e) => { console.error('CRASH:', e); process.exit(1); });

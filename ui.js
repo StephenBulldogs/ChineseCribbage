@@ -17,7 +17,11 @@ const S = {
   code:null, seat:0, room:null, myName:'', visibility:'public',
   roomSize:2, seatConfig:['open'], aiJob:'', aiTimerOnline:null, rosterTick:null,
   oRound:null, oSeed:0, oMoves:[], startedRound:-1,
-  unwatch:null, pubUnwatch:null, publicRooms:null
+  unwatch:null, pubUnwatch:null, publicRooms:null,
+  // account & social
+  uid:null, profile:null, pendingName:'', authWatched:false,
+  friends:{}, friendInfo:{}, friendWatches:{}, challenges:{}, pendingChallenge:null,
+  statsRecorded:{}
 };
 
 function show(view){
@@ -213,6 +217,7 @@ function onRoundComplete(){
   const result=E.scoreRound(S.round);
   S.lastResult={result,seat:S.match.turn};
   const {handTotal,net}=result;
+  if (S.players[S.match.turn].kind==='human') recordHand(result.rowScores, handTotal);
   $('ds-hands').innerHTML=result.rowScores.map((sc,i)=>
     `<div class="ds-row"><span class="nm">${ROW_LABELS[i]}</span><span class="bd">${breakdownHTML(sc)}</span><b>${sc.total}</b></div>`).join('');
   $('ds-eyebrow').textContent= S.mode==='solo' ? 'Round complete' : `${esc(S.players[S.match.turn].name)} · round complete`;
@@ -271,6 +276,282 @@ function showMatchOver(m){
 }
 
 /* ====================================================================
+   ACCOUNT, STATS, FRIENDS & CHALLENGES
+   --------------------------------------------------------------------
+   users/{uid}: { name, provider, friendCode, online, lastSeen,
+                  stats:{wins,losses,ties,gamesPlayed,highestHand,
+                         highestTotal,fastestWin,longestGame},
+                  friends:{fuid:{name}}, challenges:{id:{from,fromName,code,createdAt}},
+                  games:{code:{at}} }
+   friendCodes/{code}: uid
+   Sign-in: Google popup or anonymous guest (one click, no password).
+   ==================================================================== */
+const STAT_LABELS=[['currentGames','Current games'],['wins','Wins'],['losses','Losses'],['ties','Ties'],
+  ['gamesPlayed','Games played'],['highestHand','Highest hand'],['highestTotal','Highest total'],
+  ['fastestWin','Fastest win'],['longestGame','Longest game']];
+const blankStats=()=>({wins:0,losses:0,ties:0,gamesPlayed:0,highestHand:0,highestTotal:0,fastestWin:0,longestGame:0});
+const FRIEND_ALPHA='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const makeFriendCode=()=>Array.from({length:6},()=>FRIEND_ALPHA[Math.floor(Math.random()*FRIEND_ALPHA.length)]).join('');
+
+function ensureAuthWatcher(){
+  if(S.authWatched) return;
+  S.authWatched=true;
+  firebase.auth().onAuthStateChanged(onAuth);
+}
+async function signInGoogle(){
+  try{ await loadFirebase(); ensureAuthWatcher();
+    await firebase.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider());
+  }catch(e){ authError(e.message); }
+}
+async function signInGuest(){
+  try{ await loadFirebase(); ensureAuthWatcher();
+    S.pendingName=($('auth-name')&&$('auth-name').value.trim())||'';
+    await firebase.auth().signInAnonymously();
+  }catch(e){ authError(e.message); }
+}
+function doSignOut(){
+  try{ if(S.uid) fdb.ref('users/'+S.uid+'/online').set(false).catch(()=>{}); firebase.auth().signOut(); }catch(e){}
+  S.uid=null; S.profile=null; S.myName=''; S.friends={}; S.challenges={};
+  for(const u in S.friendWatches){ S.friendWatches[u](); }
+  S.friendWatches={}; S.friendInfo={};
+  renderAccount();
+  if(S.view==='online' && !S.code) oShow('auth');
+}
+function authError(msg){ const e=$('auth-err'); if(e){ e.textContent=msg; e.classList.remove('hidden'); } }
+
+async function onAuth(user){
+  if(!user){ S.uid=null; S.profile=null; renderAccount(); return; }
+  S.uid=user.uid;
+  try{
+    const snap=await fdb.ref('users/'+user.uid).get();
+    if(snap.exists()){
+      S.profile=snap.val();
+      if(!S.profile.stats) S.profile.stats=blankStats();
+    } else {
+      const name=(user.displayName&&user.displayName.split(' ')[0]) || S.pendingName
+        || 'Guest-'+Math.floor(1000+Math.random()*9000);
+      const friendCode=makeFriendCode();
+      S.profile={name, provider:user.isAnonymous?'guest':'google', friendCode,
+        createdAt:Date.now(), online:true, stats:blankStats()};
+      await fdb.ref('users/'+user.uid).set(S.profile);
+      await fdb.ref('friendCodes/'+friendCode).set(user.uid);
+    }
+    S.myName=S.profile.name;
+    // user-level presence for the friends list
+    const meRef=fdb.ref('users/'+S.uid);
+    meRef.update({online:true}).catch(()=>{});
+    if(meRef.onDisconnect) meRef.onDisconnect().update({online:false,lastSeen:firebase.database.ServerValue.TIMESTAMP});
+    watchSocial();
+  }catch(e){ authError(e.message); }
+  renderAccount();
+  if(S.view==='online' && !S.code && S.uid) oShow('lobby');
+}
+
+function watchSocial(){
+  fdb.ref('users/'+S.uid+'/friends').on('value',(snap)=>{
+    S.friends=snap.exists()?snap.val():{};
+    syncFriendWatches(); renderFriends();
+  });
+  fdb.ref('users/'+S.uid+'/challenges').on('value',(snap)=>{
+    S.challenges=snap.exists()?snap.val():{};
+    maybeShowChallenge();
+  });
+}
+function syncFriendWatches(){
+  for(const fuid in S.friends){
+    if(S.friendWatches[fuid]) continue;
+    const ref=fdb.ref('users/'+fuid);
+    const cb=ref.on('value',(snap)=>{
+      S.friendInfo[fuid]=snap.exists()?{name:snap.val().name,online:!!snap.val().online,stats:snap.val().stats}:null;
+      renderFriends();
+    });
+    S.friendWatches[fuid]=()=>ref.off('value',cb);
+  }
+  for(const fuid in S.friendWatches){
+    if(!(fuid in S.friends)){ S.friendWatches[fuid](); delete S.friendWatches[fuid]; delete S.friendInfo[fuid]; }
+  }
+}
+
+/* ---------- stats ---------- */
+function bumpStats(mut){
+  if(!S.uid||!S.profile) return;
+  mut(S.profile.stats);
+  fdb.ref('users/'+S.uid+'/stats').set(S.profile.stats).catch(()=>{});
+}
+function recordHand(rowScores, handTotal){
+  if(!S.uid) return;
+  bumpStats((st)=>{
+    const hi=Math.max(...rowScores.map((x)=>x.total));
+    if(hi>(st.highestHand||0)) st.highestHand=hi;
+    if(handTotal>(st.highestTotal||0)) st.highestTotal=handTotal;
+  });
+}
+function recordMatchEnd(room){
+  if(!S.uid||S.seat<0||!S.code||S.statsRecorded[S.code]) return;
+  S.statsRecorded[S.code]=true;
+  const rounds=Object.keys(room.rounds||{}).length;
+  bumpStats((st)=>{
+    st.gamesPlayed=(st.gamesPlayed||0)+1;
+    if(room.result==='tie') st.ties=(st.ties||0)+1;
+    else if(room.result==='p'+S.seat){
+      st.wins=(st.wins||0)+1;
+      if(!st.fastestWin||rounds<st.fastestWin) st.fastestWin=rounds;
+    } else st.losses=(st.losses||0)+1;
+    if(rounds>(st.longestGame||0)) st.longestGame=rounds;
+  });
+  fdb.ref('users/'+S.uid+'/games/'+S.code).remove().catch(()=>{});
+}
+function trackGame(code){
+  if(S.uid) fdb.ref('users/'+S.uid+'/games/'+code).set({at:Date.now()}).catch(()=>{});
+}
+
+/* ---------- friends ---------- */
+async function addFriendByCode(codeRaw){
+  const code=(codeRaw||'').trim().toUpperCase();
+  if(code.length<4) return friendError('Friend codes are six characters.');
+  if(S.profile && code===S.profile.friendCode) return friendError("That's your own code.");
+  try{
+    const snap=await fdb.ref('friendCodes/'+code).get();
+    if(!snap.exists()) return friendError('No player with that code.');
+    const fuid=snap.val();
+    const fsnap=await fdb.ref('users/'+fuid).get();
+    if(!fsnap.exists()) return friendError('No player with that code.');
+    const fname=fsnap.val().name||'Player';
+    await fdb.ref('users/'+S.uid+'/friends/'+fuid).set({name:fname});
+    await fdb.ref('users/'+fuid+'/friends/'+S.uid).set({name:S.profile.name});
+    $('friend-code').value='';
+  }catch(e){ friendError(e.message); }
+}
+function removeFriend(fuid){
+  fdb.ref('users/'+S.uid+'/friends/'+fuid).remove().catch(()=>{});
+  fdb.ref('users/'+fuid+'/friends/'+S.uid).remove().catch(()=>{});
+}
+function friendError(msg){ const e=$('friend-err'); if(e){ e.textContent=msg; e.classList.remove('hidden'); } }
+
+function renderFriends(){
+  const box=$('o-friends-list'); if(!box) return;
+  const mine=$('my-friend-code'); if(mine&&S.profile) mine.textContent=S.profile.friendCode;
+  const fuids=Object.keys(S.friends||{});
+  if(fuids.length===0){ box.innerHTML='<div class="pub-empty">No friends yet — swap codes to add one.</div>'; return; }
+  box.innerHTML=fuids.map((fuid)=>{
+    const info=S.friendInfo[fuid]||{name:(S.friends[fuid]||{}).name||'Player',online:false};
+    return `<div class="pub-item"><div class="who"><span class="dot ${info.online?'on':'offl'}"></span>${esc(info.name)}
+        <span class="age">${info.online?'online':'offline'}</span></div>
+      <div class="frow">
+        ${info.online?`<button class="btn btn-ghost mini" data-chal="${fuid}">challenge</button>`:''}
+        <button class="btn btn-ghost mini" data-view="${fuid}">profile</button>
+        <button class="btn btn-ghost mini" data-unfriend="${fuid}">remove</button>
+      </div></div>`;
+  }).join('');
+  for(const b of box.querySelectorAll('[data-chal]')) b.addEventListener('click',()=>sendChallenge(b.dataset.chal));
+  for(const b of box.querySelectorAll('[data-view]')) b.addEventListener('click',()=>openProfile(b.dataset.view));
+  for(const b of box.querySelectorAll('[data-unfriend]')) b.addEventListener('click',()=>removeFriend(b.dataset.unfriend));
+}
+
+/* ---------- challenges ---------- */
+async function sendChallenge(fuid){
+  if(!S.uid) return;
+  try{
+    const code=await createTable({size:2, seatCfg:['open'], visibility:'private'});
+    const id='c'+Date.now();
+    await fdb.ref('users/'+fuid+'/challenges/'+id).set({
+      from:S.uid, fromName:S.profile.name, code, createdAt:Date.now()});
+    enterRoomAsHost(code);
+  }catch(e){ friendError(e.message); }
+}
+function maybeShowChallenge(){
+  if(S.code) return; // already at a table
+  const entries=Object.entries(S.challenges||{})
+    .filter(([,c])=>c && Date.now()-(c.createdAt||0) < 60*60*1000)
+    .sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0));
+  if(entries.length===0 || $('d-challenge').open) return;
+  const [id,c]=entries[0];
+  S.pendingChallenge={id,...c};
+  $('dc-text').textContent=`${c.fromName} challenges you to a duel.`;
+  $('d-challenge').showModal();
+}
+function acceptChallenge(){
+  const c=S.pendingChallenge; if(!c) return;
+  $('d-challenge').close();
+  fdb.ref('users/'+S.uid+'/challenges/'+c.id).remove().catch(()=>{});
+  S.pendingChallenge=null;
+  show('online');
+  joinByCode(c.code);
+}
+function declineChallenge(){
+  const c=S.pendingChallenge; if(!c) return;
+  $('d-challenge').close();
+  fdb.ref('users/'+S.uid+'/challenges/'+c.id).remove().catch(()=>{});
+  S.pendingChallenge=null;
+}
+
+/* ---------- profile ---------- */
+async function openProfile(uid){
+  const self=!uid||uid===S.uid;
+  let prof, gamesCount=0, gameCodes=[];
+  if(self){
+    prof=S.profile;
+    try{
+      const gs=await fdb.ref('users/'+S.uid+'/games').get();
+      if(gs.exists()){ gameCodes=Object.keys(gs.val()); gamesCount=gameCodes.length; }
+    }catch(e){}
+  } else {
+    try{
+      const snap=await fdb.ref('users/'+uid).get();
+      if(!snap.exists()) return;
+      prof=snap.val();
+    }catch(e){ return; }
+  }
+  if(!prof) return;
+  const st={...blankStats(),...(prof.stats||{})};
+  st.currentGames=self?gamesCount:undefined;
+  const grid=STAT_LABELS
+    .filter(([k])=>!(k==='currentGames'&&!self))
+    .map(([k,label])=>`<div class="stat"><div class="sv">${k==='currentGames'?gamesCount:(st[k]||0)}${(k==='fastestWin'||k==='longestGame')&&st[k]?' r':''}</div><div class="sl">${label}</div></div>`).join('');
+  const isFriend=!self && S.friends && uid in S.friends;
+  $('dp-name').textContent=prof.name||'Player';
+  $('dp-sub').textContent= self
+    ? `your friend code: ${prof.friendCode||'—'}`
+    : (prof.online?'online now':'offline');
+  $('dp-stats').innerHTML=grid;
+  $('dp-extra').innerHTML= self
+    ? (gameCodes.length?`<div class="dp-games">Active tables: ${gameCodes.map((c)=>`<button class="btn btn-ghost mini" data-rejoin="${c}">${c}</button>`).join(' ')}</div>`:'')
+      +`<div class="join-row" style="margin-top:12px"><input type="text" id="dp-rename" maxlength="16" placeholder="change display name"><button class="btn btn-ghost" id="dp-rename-go">rename</button></div>`
+    : `<button class="btn ${isFriend?'btn-ghost':'btn-primary'}" id="dp-friend" style="width:100%;margin-top:12px">${isFriend?'Remove friend':'Add friend'}</button>`;
+  if(self){
+    for(const b of $('dp-extra').querySelectorAll('[data-rejoin]'))
+      b.addEventListener('click',()=>{ $('d-profile').close(); show('online'); joinByCode(b.dataset.rejoin); });
+    const rn=$('dp-rename-go');
+    if(rn) rn.addEventListener('click',async()=>{
+      const nn=$('dp-rename').value.trim(); if(!nn) return;
+      S.profile.name=nn; S.myName=nn;
+      await fdb.ref('users/'+S.uid+'/name').set(nn).catch(()=>{});
+      renderAccount(); $('dp-name').textContent=nn;
+    });
+  } else {
+    $('dp-friend').addEventListener('click',async()=>{
+      if(isFriend) removeFriend(uid);
+      else {
+        await fdb.ref('users/'+S.uid+'/friends/'+uid).set({name:prof.name}).catch(()=>{});
+        await fdb.ref('users/'+uid+'/friends/'+S.uid).set({name:S.profile.name}).catch(()=>{});
+      }
+      $('d-profile').close();
+    });
+  }
+  $('d-profile').showModal();
+}
+
+function renderAccount(){
+  const bar=$('o-account'); if(!bar) return;
+  if(!S.uid||!S.profile){ bar.innerHTML=''; return; }
+  bar.innerHTML=`<span class="chip"><span class="dot on"></span>${esc(S.profile.name)}</span>
+    <button class="btn btn-ghost mini" id="acct-profile">profile</button>
+    <button class="btn btn-ghost mini" id="acct-out">sign out</button>`;
+  $('acct-profile').addEventListener('click',()=>openProfile(null));
+  $('acct-out').addEventListener('click',doSignOut);
+}
+
+/* ====================================================================
    ONLINE TABLE — 2–4 players, AI seat-fillers, live spectating, rejoin
    --------------------------------------------------------------------
    rooms/{code}: size, players{p0..p3:{name,joined,ai?,difficulty?,connected}},
@@ -285,17 +566,19 @@ function showMatchOver(m){
      the same name. The live move log restores their half-played round.
    ==================================================================== */
 function oShow(part){
-  for (const p of ['o-lobby','o-setup','o-wait','o-game']) $(p).classList.toggle('hidden',p!=='o-'+part);
+  for (const p of ['o-auth','o-lobby','o-setup','o-wait','o-game']) $(p).classList.toggle('hidden',p!=='o-'+part);
 }
 const seatKeys=(room)=>Array.from({length:room.size||2},(_,k)=>'p'+k);
 const seatName=(room,k)=>{const p=(room.players||{})['p'+k];return p?p.name:'open seat';};
 async function openOnline(){
   show('online');
   if (!firebaseConfigured()) return oShow('setup');
-  oShow('lobby');
+  oShow(S.uid?'lobby':'auth');
   renderSeatConfig();
+  renderAccount();
   try{
     await loadFirebase();
+    ensureAuthWatcher();
     if (!S.pubUnwatch){
       const ref=fdb.ref('publicRooms');
       const cb=ref.on('value',(snap)=>{ S.publicRooms=snap.exists()?snap.val():{}; renderPublicRooms(); });
@@ -339,37 +622,42 @@ function oError(msg){ const e=$('o-err'); e.textContent=msg; e.classList.remove(
 
 const AI_SEAT_NAMES={easy:'Deckhand',medium:'Navigator',hard:'Captain'};
 
+async function createTable({size, seatCfg, visibility}){
+  const db=await loadFirebase();
+  const code=makeRoomCode();
+  const players={p0:{name:S.myName,uid:S.uid,joined:true,connected:true}};
+  const totals={};
+  for(let k=0;k<size;k++) totals['t'+k]=0;
+  seatCfg.forEach((cfg,idx)=>{
+    if(cfg!=='open') players['p'+(idx+1)]={
+      name:`${AI_SEAT_NAMES[cfg]} (AI ${idx+2})`, joined:true, ai:true, difficulty:cfg, connected:true };
+  });
+  await db.ref('rooms/'+code).set({
+    createdAt:Date.now(), size, players,
+    rounds:{}, currentRound:0, turn:0, totals,
+    status:'waiting', visibility
+  });
+  if (visibility==='public') await db.ref('publicRooms/'+code).set({host:S.myName,createdAt:Date.now(),size});
+  return code;
+}
+function enterRoomAsHost(code){
+  S.code=code; S.seat=0; S.startedRound=-1; S.aiJob=''; S.oCounted=-1;
+  $('o-room-code').textContent=code; $('o-wait-title').textContent='Room '+code;
+  show('online'); oShow('wait'); watchRoom(); registerPresence(); startRosterTick(); trackGame(code);
+}
 async function oCreate(){
-  const name=$('o-name').value.trim(); if(!name) return oError('Enter your name first.');
-  S.myName=name;
+  if(!S.uid) return oShow('auth');
   try{
-    const db=await loadFirebase();
-    const code=makeRoomCode();
-    const size=S.roomSize;
-    const players={p0:{name,joined:true,connected:true}};
-    const totals={};
-    for(let k=0;k<size;k++) totals['t'+k]=0;
-    S.seatConfig.forEach((cfg,idx)=>{
-      if(cfg!=='open') players['p'+(idx+1)]={
-        name:`${AI_SEAT_NAMES[cfg]} (AI ${idx+2})`, joined:true, ai:true, difficulty:cfg, connected:true };
-    });
-    await db.ref('rooms/'+code).set({
-      createdAt:Date.now(), size, players,
-      rounds:{}, currentRound:0, turn:0, totals,
-      status:'waiting', visibility:S.visibility
-    });
-    if (S.visibility==='public') await db.ref('publicRooms/'+code).set({host:name,createdAt:Date.now(),size});
-    S.code=code; S.seat=0; S.startedRound=-1; S.aiJob=''; S.oCounted=-1;
-    $('o-room-code').textContent=code; $('o-wait-title').textContent='Room '+code;
-    oShow('wait'); watchRoom(); registerPresence(); startRosterTick();
+    const code=await createTable({size:S.roomSize, seatCfg:S.seatConfig, visibility:S.visibility});
+    enterRoomAsHost(code);
   }catch(e){ oError(e.message); }
 }
 
 /** Join OR rejoin: a seat already carrying your name is yours to take back. */
 async function joinByCode(code){
-  const name=$('o-name').value.trim(); if(!name) return oError('Enter your name first, then join.');
+  if(!S.uid) return oShow('auth');
+  const name=S.myName;
   if(!code||code.length!==5) return oError('Room codes are five letters.');
-  S.myName=name;
   try{
     const db=await loadFirebase();
     const snap=await db.ref('rooms/'+code).get();
@@ -382,7 +670,7 @@ async function joinByCode(code){
     let seat=-1;
     for(let k=0;k<size;k++){
       const p=(room.players||{})['p'+k];
-      if(p && p.joined && !p.ai && p.name===name){ seat=k; break; }   // rejoin
+      if(p && p.joined && !p.ai && (p.uid===S.uid || p.name===name)){ seat=k; break; } // rejoin
     }
     if(seat===-1) for(let k=0;k<size;k++){
       const p=(room.players||{})['p'+k];
@@ -395,8 +683,9 @@ async function joinByCode(code){
     }
     if(seat>=0){
       const existing=(room.players||{})['p'+seat];
-      if(!existing || existing.name!==name)
-        await db.ref('rooms/'+code+'/players/p'+seat).set({name,joined:true,connected:true});
+      if(!existing || (existing.uid!==S.uid && existing.name!==name))
+        await db.ref('rooms/'+code+'/players/p'+seat).set({name,uid:S.uid,joined:true,connected:true});
+      trackGame(code);
     }
     S.code=code; S.seat=seat; S.startedRound=-1; S.aiJob=''; S.oCounted=-1; // seat -1 → spectator
     if (seat===0 && room.status==='waiting'){
@@ -412,9 +701,9 @@ async function claimSeat(k){
   if(!S.room||!S.code||S.seat>=0) return;
   const p=(S.room.players||{})['p'+k];
   if(!p || p.ai || p.connected!==false || !p.disconnectedAt || Date.now()-p.disconnectedAt<TAKEOVER_MS()) return;
-  await fdb.ref('rooms/'+S.code+'/players/p'+k).set({name:S.myName,joined:true,connected:true});
+  await fdb.ref('rooms/'+S.code+'/players/p'+k).set({name:S.myName,uid:S.uid,joined:true,connected:true});
   S.seat=k; S.startedRound=-1; S.oCounted=-1;
-  registerPresence();
+  registerPresence(); trackGame(S.code);
 }
 
 function registerPresence(){
@@ -471,7 +760,8 @@ function rosterHTML(room){
     const off=!p.ai && p.connected===false;
     const claimable=off && p.disconnectedAt && now-p.disconnectedAt>=TAKEOVER_MS() && S.seat===-1;
     const heldFor=off && p.disconnectedAt ? Math.max(0, Math.ceil((TAKEOVER_MS()-(now-p.disconnectedAt))/1000)) : 0;
-    out+=`<span class="chip ${off?'off':''}"><span class="dot"></span>${esc(p.name)}${k===S.seat?' (you)':''}
+    const profAttr=p.uid&&p.uid!==S.uid&&!p.ai?` data-uid="${p.uid}" role="button" tabindex="0" title="view profile"`:'';
+    out+=`<span class="chip ${off?'off':''} ${profAttr?'clicky':''}"${profAttr}><span class="dot"></span>${esc(p.name)}${k===S.seat?' (you)':''}
       ${p.ai?'<span class="tag-ai">AI</span>':''}
       ${off ? (claimable
         ? `<button class="btn btn-ghost claim" data-claim="${k}">take seat</button>`
@@ -482,7 +772,9 @@ function rosterHTML(room){
 }
 function bindClaims(container){
   for (const b of container.querySelectorAll('[data-claim]'))
-    b.addEventListener('click',()=>claimSeat(+b.dataset.claim));
+    b.addEventListener('click',(e)=>{ e.stopPropagation(); claimSeat(+b.dataset.claim); });
+  for (const c of container.querySelectorAll('[data-uid]'))
+    c.addEventListener('click',()=>openProfile(c.dataset.uid));
 }
 
 function onRoomUpdate(){
@@ -613,6 +905,7 @@ function renderOnline(){
   $('o-history').innerHTML=historyHTML(room);
 
   if(room.status==='done'){
+    recordMatchEnd(room);
     const iWon=S.seat>=0 && room.result==='p'+S.seat;
     $('do-title').textContent= room.result==='tie'?"It's a tie": iWon?'You win the table':`${seatName(room,+room.result.slice(1))} takes it`;
     $('do-sub').textContent=lanes.map(l=>`${l.name.replace(' (you)','')} ${l.total}`).join(' · ');
@@ -652,7 +945,9 @@ function renderOnline(){
       });
     const sb=$('o-submit');
     if(sb) sb.addEventListener('click',()=>{
-      const net=E.scoreRound(S.oRound).net;
+      const res=E.scoreRound(S.oRound);
+      recordHand(res.rowScores, res.handTotal);
+      const net=res.net;
       fdb.ref('rooms/'+S.code).update({
         ['rounds/'+room.currentRound+'/net'+S.seat]:net,
         turn:(S.seat+1)%size
@@ -726,6 +1021,13 @@ $('do-rematch').addEventListener('click',()=>{ $('d-over').close();
 $('do-home').addEventListener('click',()=>{ $('d-over').close(); if(S.view==='online') leaveRoom(); else { S.match=null; show('home'); } });
 $('btn-info').addEventListener('click',()=>$('d-rules').showModal());
 $('dr-close').addEventListener('click',()=>$('d-rules').close());
+$('auth-google').addEventListener('click',signInGoogle);
+$('auth-guest').addEventListener('click',signInGuest);
+$('auth-back').addEventListener('click',()=>show('home'));
+$('dp-close').addEventListener('click',()=>$('d-profile').close());
+$('dc-accept').addEventListener('click',acceptChallenge);
+$('dc-decline').addEventListener('click',declineChallenge);
+$('friend-add').addEventListener('click',()=>addFriendByCode($('friend-code').value));
 $('o-create').addEventListener('click',oCreate);
 $('o-join').addEventListener('click',()=>joinByCode($('o-code').value.trim().toUpperCase()));
 $('o-back').addEventListener('click',()=>show('home'));

@@ -22,6 +22,17 @@ Just open `index.html` in a browser. To host it, drop the file on any static hos
 
 Keyboard play: press **1–5** to place the current card into a row.
 
+## Accounts, stats, friends & challenges
+
+- **Sign-in** gates online play: **Continue with Google** (popup) or **Play as guest** — one tap, anonymous Firebase auth, no username or password either way. Guests can pick a display name (or get Guest-XXXX) and rename later from their profile.
+- **Profile stats** per account: Current games (active tables, with one-tap rejoin buttons), Wins, Losses, Ties, Games played, Highest hand, Highest total (best five-hand round), Fastest win and Longest game (in rounds). Win/loss/tie and game-length stats come from completed online matches; highest hand/total also update from solo, AI, and pass-and-play rounds you play while signed in.
+- **Friends**: every account gets a six-character friend code (shown in your profile and the lobby). Enter someone's code to add them — it's mutual. The lobby friends list shows live online/offline status with **challenge** (online friends only — creates a private 2-seat table and pops an Accept/Decline dialog on their screen), **profile**, and **remove** actions.
+- **Profiles of people you play with**: roster chips for signed-in players are tappable during a match — view their stats and add/remove them as a friend right from the table.
+
+### One-time Firebase console setup for sign-in
+
+In your Firebase project: **Build → Authentication → Sign-in method** → enable **Google** and **Anonymous**. Then under **Authentication → Settings → Authorized domains**, add the domain where you host the site (localhost is pre-authorized). Without this, the Google button will error and guest sign-in will be rejected.
+
 ## Online duels
 
 The Firebase config for the `chinese-cribbage` project is already embedded in `index.html` (web API keys are public identifiers — security comes from the database rules). Make sure the Realtime Database **Rules** tab contains:
@@ -35,10 +46,19 @@ The Firebase config for the `chinese-cribbage` project is already embedded in `i
     "publicRooms": {
       ".read": true,
       "$code": { ".write": true }
+    },
+    "users": {
+      "$uid": { ".read": true, ".write": true }
+    },
+    "friendCodes": {
+      ".read": true,
+      "$code": { ".write": true }
     }
   }
 }
 ```
+
+(These open rules are fine for friends-and-family; before anything truly public, scope user writes with `"$uid": { ".write": "auth.uid === $uid" }` and harden the social writes with security rules or Cloud Functions.)
 
 Fine for friends-and-family; add Firebase Anonymous Auth before anything public.
 
