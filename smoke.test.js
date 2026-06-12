@@ -19,6 +19,11 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const waitFor = async (fn, ms) => { const t0 = Date.now();
     while (Date.now() - t0 < ms) { if (fn()) return true; await sleep(40); } return fn(); };
   check('home visible at load', !$('view-home').classList.contains('hidden'));
+  check('old hero copy removed', !doc.body.textContent.includes('FIVE HANDS') && !doc.body.textContent.includes('Twenty cards'));
+  check('splash: offline and online doors', $('splash-offline') !== null && $('splash-online') !== null);
+  check('splash: offline tiles start hidden', $('offline-tiles').classList.contains('hidden'));
+  $('splash-offline').click();
+  check('splash: offline reveals 3 modes', !$('offline-tiles').classList.contains('hidden') && doc.querySelectorAll('#offline-tiles .tile').length === 3);
 
   // ---- the slow count + skip (normal speed) ----
   $('tile-solo').click();
@@ -133,19 +138,25 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   $('btn-quit').click();
 
   // online configured → sign-in gate first
-  $('tile-online').click();
+  $('splash-online').click();
   check('online requires sign-in (auth panel shown)', !$('o-auth').classList.contains('hidden'));
   check('Google + guest options, no passwords', $('auth-google') !== null && $('auth-guest') !== null);
-  check('lobby has visibility pills', doc.querySelectorAll('.vis-row .pill').length === 2);
+  check('lobby has visibility pills', doc.querySelectorAll('#o-lobby .vis-row .pill').length === 2);
   check('lobby has an open-tables section', $('o-public') !== null);
   $('auth-back').click();
   check('back returns home', !$('view-home').classList.contains('hidden'));
 
-  // ================= CHALLENGE MAP =================
+  // ================= CONQUEST =================
   win.__lifeMs = 300; // fast heart regrowth for the test
   const CC = win.__cc;
-  $('tile-map').click();
-  check('map: opens with 24 level nodes', doc.querySelectorAll('.map-node').length === 24);
+  // guests are gated out
+  CC.S.uid = 'g-guest'; CC.S.profile = { name: 'G', provider: 'guest', stats: {} };
+  CC.openMap();
+  check('conquest: guests are routed to the lobby instead', $('view-map').classList.contains('hidden') && !$('view-online').classList.contains('hidden'));
+  // Google accounts get in
+  CC.S.profile = { name: 'Tester', provider: 'google', stats: {}, xp: 0 };
+  CC.openMap();
+  check('conquest: opens with 24 level nodes', doc.querySelectorAll('.map-node').length === 24);
   check('map: only level 1 unlocked', doc.querySelectorAll('.map-node.locked').length === 23);
   check('map: five hearts shown', $('map-lives').textContent.includes('❤❤❤❤❤'));
 
@@ -154,6 +165,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   check('map: level dialog explains the stake', $('d-level').open && $('dl-desc').textContent.includes('costs a life'));
   $('dl-play').click();
   check('map: challenge starts in the game view', !$('view-game').classList.contains('hidden') && $('g-round').textContent.includes('Level 1'));
+  check('map: the goal is visible during the challenge', !$('g-goal').classList.contains('hidden') && $('g-goal').textContent.includes('Goal: reach 29'));
 
   // win via the hook (random play cannot reliably reach 29)
   CC.challengeWin(3);
@@ -171,6 +183,9 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   check('map: quitting mid-level is a fail', CC.S.campaign.lives === 3 && $('d-chal').open);
   $('dcr-map').click();
   check('map: back on the map after the result', !$('view-map').classList.contains('hidden'));
+  $('map-back').click();
+  check('map: back goes to the online lobby now', !$('view-online').classList.contains('hidden'));
+  CC.openMap();
 
   // run out of hearts: play locks behind the regrowth timer
   CC.S.campaign.lives = 0; CC.S.campaign.lastLifeAt = Date.now();

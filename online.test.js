@@ -84,12 +84,13 @@ const waitFor = async (fn, ms, step = 80) => { const t0 = Date.now();
 const faceUp = (doc) => doc.querySelectorAll('#o-play .row-btn:not(.crib) .card:not(.back)').length;
 const cribBacks = (doc) => doc.querySelectorAll('#o-play .row-btn.crib .card.back').length;
 
-const signInGuest = async (win, name) => {
-  const doc = win.document;
-  doc.getElementById('tile-online').click();
+const signIn = async (client, name, google = true) => {
+  const doc = client.window.document;
+  client.googleName = name;
+  doc.getElementById('splash-online').click();
   await sleep(60);
-  doc.getElementById('auth-name').value = name;
-  doc.getElementById('auth-guest').click();
+  if (google) doc.getElementById('auth-google').click();
+  else { doc.getElementById('auth-name').value = name; doc.getElementById('auth-guest').click(); }
   await waitFor(() => !doc.getElementById('o-lobby').classList.contains('hidden'), 2000);
 };
 
@@ -111,8 +112,8 @@ const playOut = async (win) => {
   // ---------- host creates a 3-seat public table with an AI in seat 3 ----------
   const cA = makeClient(), A = cA.window;
   const $a = (id) => A.document.getElementById(id);
-  await signInGuest(A, 'Anna');
-  check('A: signed in as guest, lobby shown', !$a('o-lobby').classList.contains('hidden'));
+  await signIn(cA, 'Anna');
+  check('A: signed in with Google, lobby shown', !$a('o-lobby').classList.contains('hidden'));
   check('A: account bar shows Anna', $a('o-account').textContent.includes('Anna'));
   A.document.querySelector('.size-row .pill[data-n="3"]').click(); await sleep(20);
   A.document.querySelector('#o-seats .pill[data-seat="1"][data-cfg="medium"]').click(); await sleep(20);
@@ -123,10 +124,13 @@ const playOut = async (win) => {
   // ---------- guest joins from the public list ----------
   const cB = makeClient(), B = cB.window;
   const $b = (id) => B.document.getElementById(id);
-  await signInGuest(B, 'Ben');
+  await signIn(cB, 'Ben');
   B.document.querySelector('#o-public [data-join]').click();
   await waitFor(() => (getPath('rooms/'+code)||{}).status === 'playing', 2000);
   check('room auto-starts when seats fill', getPath('rooms/'+code).status === 'playing');
+  // keep the match from ending naturally before the scripted endgame
+  setPath('rooms/'+code+'/totals', { t0: -500, t1: -500, t2: -1000 });
+  notify(); await sleep(60);
   check('registry persists as watchable, marked in play', (getPath('publicRooms/'+code)||{}).status === 'playing');
 
   // ---------- round 1: Anna → Ben → AI; spectator joins mid-round ----------
@@ -136,7 +140,7 @@ const playOut = async (win) => {
   // Cara opens the lobby, sees the in-play table with a Watch button
   const cC = makeClient(50), C = cC.window; // 50ms takeover window for the test
   const $c = (id) => C.document.getElementById(id);
-  await signInGuest(C, 'Cara');
+  await signIn(cC, 'Cara');
   check("C: lobby shows Anna's table as watchable", $c('o-public').textContent.includes('in play') && $c('o-public').textContent.includes('Watch'));
   C.document.querySelector('#o-public [data-join]').click();
   await waitFor(() => !$c('o-game').classList.contains('hidden'), 2000);
@@ -161,7 +165,7 @@ const playOut = async (win) => {
 
   const cB2 = makeClient(), B2 = cB2.window;
   const $b2 = (id) => B2.document.getElementById(id);
-  await signInGuest(B2, 'Ben');
+  await signIn(cB2, 'Ben');
   $b2('o-code').value = code;
   $b2('o-join').click();
   await waitFor(() => $b2('o-play').children.length > 0, 2000);
@@ -188,7 +192,7 @@ const playOut = async (win) => {
   await waitFor(() => { const r = getPath('rooms/'+code); return r.currentRound === 3 || r.status === 'done'; }, 8000);
 
   // ---------- forced endgame ----------
-  setPath('rooms/'+code+'/totals', { t0: 200, t1: 0, t2: 0 });
+  setPath('rooms/'+code+'/totals', { t0: 200, t1: -500, t2: -1000 });
   notify(); await sleep(80);
   let guard = 0;
   while ((getPath('rooms/'+code)||{}).status !== 'done' && guard++ < 10) {
@@ -218,10 +222,12 @@ const playOut = async (win) => {
   $c('do-home').click(); await sleep(60);
 
   // own profile dialog
-  $a('tile-online').click(); await sleep(60);
+  $a('splash-online').click(); await sleep(60);
   $a('acct-profile').click();
   await waitFor(() => $a('d-profile').open, 1500);
-  check('profile: own dialog shows all 9 stat tiles', A.document.querySelectorAll('#dp-stats .stat').length === 9);
+  check('profile: shows all 11 stat tiles incl Conquest', A.document.querySelectorAll('#dp-stats .stat').length === 11);
+  check('profile: level chip and xp from the match win', $a('dp-level').textContent.startsWith('Lv') && (store.users[aUid].xp || 0) >= 100);
+  check('profile: banner picker with 8 banners, dragon locked', A.document.querySelectorAll('#dp-banners .banner-swatch').length === 8 && A.document.querySelector('[data-banner="dragon"]').disabled);
   check('profile: shows the friend code', $a('dp-sub').textContent.includes(aUser.friendCode));
   $a('dp-close').click();
 
@@ -250,15 +256,42 @@ const playOut = async (win) => {
   await waitFor(() => $a('d-profile').open, 1500);
   check('profile: opponent dialog shows Cara with friend toggle', $a('dp-name').textContent === 'Cara' && $a('dp-friend').textContent === 'Remove friend');
 
-  // campaign progress saves to the account
+  // Conquest progress, hearts and the regrow clock save to the account
   $a('dp-close') && $a('d-profile').open && $a('dp-close').click();
-  A.document.getElementById('tile-map').click();
+  A.__cc.openMap();
   await sleep(40);
+  check('conquest: map opens for a Google account', !A.document.getElementById('view-map').classList.contains('hidden'));
   A.document.querySelector('.map-node[data-level="1"]').click();
   A.document.getElementById('dl-play').click();
+  check('conquest: goal shown during play', $a('g-goal').textContent.includes('Goal'));
   A.__cc.challengeWin(2);
+  await sleep(100);
+  const camp = store.users[aUid].campaign || {};
+  check('conquest: progress synced to the account', camp.level === 2 && camp.stars['1'] === 2);
+  check('conquest: hearts and regrow clock stored too', typeof camp.lives === 'number' && typeof camp.lastLifeAt === 'number');
+  check('conquest: clear paid xp on top of the match win', (store.users[aUid].xp || 0) >= 180);
+  check('leaderboard: entry pushed with stars and level', (store.leaderboard[aUid] || {}).stars === 2 && store.leaderboard[aUid].plevel >= 2);
+
+  // leaderboard dialog: global with trophies, then friends
+  A.document.getElementById('dcr-map').click();
+  await sleep(40);
+  A.document.getElementById('map-board').click();
+  await waitFor(() => $a('d-board').open, 2000);
+  check('leaderboard: global list with a gold trophy', $a('db-list').textContent.includes('🥇'));
+  A.document.getElementById('db-friends').click();
   await sleep(80);
-  check('campaign: progress synced to the account', (store.users[aUid].campaign || {}).level === 2 && store.users[aUid].campaign.stars['1'] === 2);
+  check('leaderboard: friends tab shows Anna and Cara', $a('db-list').textContent.includes('Anna') && $a('db-list').textContent.includes('Cara'));
+  A.document.getElementById('db-close').click();
+
+  // guests are gated out of friends and Conquest
+  const cG = makeClient(), G = cG.window;
+  await signIn(cG, 'Gus', false);
+  const $g = (id) => G.document.getElementById(id);
+  check('guest: friends section hidden', $g('lobby-friends').classList.contains('hidden'));
+  check('guest: Conquest panel shows the sign-in note', $g('o-conquest').textContent.includes('Google'));
+  G.__cc.openMap();
+  await sleep(30);
+  check('guest: cannot enter the Conquest map', G.document.getElementById('view-map').classList.contains('hidden'));
 
   console.log(fails === 0 ? '\nMULTIPLAYER V6 TEST PASSED' : `\n${fails} FAILURES`);
   process.exit(fails ? 1 : 0);

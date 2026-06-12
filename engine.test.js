@@ -52,6 +52,22 @@ eq('higher total wins', m.outcome, { kind: 'win', player: 1 });
 let m2 = E.newMatch(0); m2 = E.applyRoundNet(m2, 29); m2 = E.applyRoundNet(m2, 29);
 eq('tie', m2.outcome.kind, 'tie');
 
+// His heels: Jack starter adds 2 to the round total
+{
+  const mk=(r,s)=>({rank:r,suit:s});
+  const rows=[[mk(2,'H'),mk(4,'D'),mk(7,'C'),mk(9,'S')],[mk(3,'H'),mk(6,'D'),mk(8,'C'),mk(13,'S')],
+    [mk(2,'D'),mk(4,'H'),mk(7,'S'),mk(9,'C')],[mk(3,'D'),mk(6,'H'),mk(8,'S'),mk(13,'C')],
+    [mk(2,'C'),mk(4,'S'),mk(7,'H'),mk(9,'D')]];
+  const jackState={rows, starter:mk(11,'H'), complete:true};
+  const tenState={rows, starter:mk(10,'H'), complete:true};
+  const rj=E.scoreRound(jackState), rt=E.scoreRound(tenState);
+  const rowsOnlyJ=jackState.rows.reduce((n,row,i)=>n+E.scoreHand(row,jackState.starter,i===4).total,0);
+  eq('heels: jack starter adds exactly 2', rj.handTotal, rowsOnlyJ+2);
+  eq('heels: reported in the result', rj.heels, 2);
+  eq('heels: non-jack starter adds nothing', rt.heels, 0);
+  eq('heels: net includes the 2', rj.net, rj.handTotal-29);
+}
+
 // Detail scoring must always agree with scoreHand, card-for-card
 let detailOk = true, comboIdxOk = true;
 {

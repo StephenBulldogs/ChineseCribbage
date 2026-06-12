@@ -172,8 +172,11 @@ function settle(s) {
 
 function scoreRound(s) {
   const rowScores = s.rows.map((row, i) => scoreHand(row, s.starter, i === CRIB_ROW));
-  const handTotal = rowScores.reduce((n, x) => n + x.total, 0);
-  return { rowScores, handTotal, net: handTotal - PAR };
+  // His heels: a Jack turned as the starter is 2 points to the dealer,
+  // and in this game the player is always their own dealer.
+  const heels = s.starter && s.starter.rank === 11 ? 2 : 0;
+  const handTotal = rowScores.reduce((n, x) => n + x.total, 0) + heels;
+  return { rowScores, heels, handTotal, net: handTotal - PAR };
 }
 
 // --- Match: race to 29, equal rounds guaranteed, ties allowed ---

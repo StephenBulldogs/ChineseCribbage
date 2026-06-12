@@ -15,23 +15,33 @@ Rules: the first five cards auto-deal (one per hand, one face-down to the crib);
 
 ## Run it
 
-Just open `index.html` in a browser. To host it, drop the file on any static host:
+Just open `index.html` in a browser. The home page is a splash with two doors: **Offline play** (solo, versus AI, pass and play) and **Online play** (sign-in, tables, Conquest, friends, leaderboards). To host it, drop the file on any static host:
 
 - **GitHub Pages**: push to a repo, Settings → Pages → deploy from branch.
 - **Netlify / Vercel / Cloudflare Pages**: drag-and-drop the file.
 
 Keyboard play: press **1–5** to place the current card into a row.
 
-## Challenge map
+## Conquest
 
-A Candy Crush style campaign: a winding map of **24 levels** with three challenge types that escalate. Solo sprints (reach 29 within 8 rounds, shrinking to a brutal 2), single-hand hunts (score 35+ in one round, climbing to 60+), and AI duels (the Deckhand, then the Navigator, then the Captain, with growing head starts up to 25 points). Levels unlock in order; each clear awards **1 to 3 stars** by margin (rounds to spare, points over target, or final lead).
+An online campaign for Google-signed-in accounts (guests stay casual: no Conquest, no friends list): a winding map of **24 levels** with three escalating challenge types. Solo sprints (reach 29 within 8 rounds, shrinking to a brutal 2), single-hand hunts (score 35+ in one round, climbing to 60+), and AI duels (Deckhand, Navigator, Captain, with head starts up to 25 points). Levels unlock in order and any unlocked level can be replayed at any time. The goal is shown on screen throughout the challenge, and each clear awards **1 to 3 stars** by margin.
 
-**Lives:** you have 5 hearts. Failing a level costs one, and quitting mid-level counts as a fail. One heart regrows every **30 minutes** (the map shows a live countdown), and you cannot start a level with no hearts. Progress (unlocked level, stars, hearts, regrow timer) saves to your account when signed in via the online tab; otherwise it lasts for the browser session.
+**Lives:** 5 hearts. Failing a level costs one, and quitting mid-level counts as a fail. One heart regrows every **30 minutes**; the regrow clock is a stored timestamp, so going offline and coming back refills exactly the hearts you earned while away. Everything (unlocked level, stars, hearts, regrow clock) saves to your account.
+
+**Leaderboards:** global and friends-only Conquest boards ranked by total stars (then levels cleared), with 🥇🥈🥉 trophies for the top three. Reachable from the Conquest map and the lobby.
+
+## Player levels and banners
+
+Wins and Conquest victories earn **XP**: online win +100, tie +40, loss +20; first Conquest clear +50 plus 15 per star, repeat clears +10. Level n to n+1 costs 100·n XP; your level and progress bar show on your profile. **Banners** decorate your profile and leaderboard entry, unlocking by player level (Jade tide at 3, Gold wave at 5, Plum blossom at 8, Lantern glow at 12) or Conquest milestones (Bamboo grove at 10 stars, Gold cloud at 30, Dragon for clearing all 24). Pick the equipped banner from your profile. Profile photos are a possible future addition.
+
+## Scoring note
+
+**His heels** is implemented: when the starter turned over is a Jack, 2 points are added to the round total (in this game you are always your own dealer). The animated count announces it, and the score sheet lists it as its own line.
 
 ## Accounts, stats, friends & challenges
 
 - **Sign-in** gates online play: **Continue with Google** (popup) or **Play as guest**. Guest is a plain local session: one tap, a session id generated in the browser, no auth provider, no username or password. Guests can pick a display name (or get Guest-XXXX) and rename later from their profile. A guest identity lasts for the browser session; rejoining a table after a full restart still works through the same-name-plus-code path. The Firebase Auth SDK is only loaded if someone actually clicks the Google button.
-- **Profile stats** per account: Current games (active tables, with one-tap rejoin buttons), Wins, Losses, Ties, Games played, Highest hand, Highest total (best five-hand round), Fastest win and Longest game (in rounds). Win/loss/tie and game-length stats come from completed online matches; highest hand/total also update from solo, AI, and pass-and-play rounds you play while signed in.
+- **Profile stats** per account: Current games (active tables, with one-tap rejoin buttons), Wins, Losses, Ties, Games played, Highest hand, Highest total (best five-hand round), Fastest win, Longest game (in rounds), plus **Conquest levels cleared** and **total Conquest stars**. Win/loss/tie and game-length stats come from completed online matches; highest hand/total also update from solo, AI, and pass-and-play rounds you play while signed in.
 - **Friends**: every account gets a six-character friend code (shown in your profile and the lobby). Enter someone's code to add them. it's mutual. The lobby friends list shows live online/offline status with **challenge** (online friends only. creates a private 2-seat table and pops an Accept/Decline dialog on their screen), **profile**, and **remove** actions.
 - **Profiles of people you play with**: roster chips for signed-in players are tappable during a match. view their stats and add/remove them as a friend right from the table.
 
@@ -59,6 +69,10 @@ The Firebase config for the `chinese-cribbage` project is already embedded in `i
     "friendCodes": {
       ".read": true,
       "$code": { ".write": true }
+    },
+    "leaderboard": {
+      ".read": true,
+      "$uid": { ".write": true }
     }
   }
 }

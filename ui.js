@@ -107,6 +107,7 @@ function countDelay(ev){
 function startCount(round, prefix, done){
   cancelCount();
   const queue=[];
+  if (round.starter && round.starter.rank===11) queue.push({t:'heels'});
   for(let r=0;r<5;r++){
     const det=E.scoreHandDetail(round.rows[r], round.starter, r===E.CRIB_ROW);
     queue.push({t:'row', row:r});
@@ -121,7 +122,10 @@ function stepCount(){
   const c=S.count; if(!c||!c.active) return;
   if(c.pos>=c.queue.length) return finishCount();
   const ev=c.queue[c.pos++];
-  if(ev.t==='row'){
+  if(ev.t==='heels'){
+    c.row=-1; c.set=new Set([4]);
+    c.label='His heels'; c.sub='+2. The starter is a Jack.';
+  } else if(ev.t==='row'){
     c.row=ev.row; c.set=new Set();
     if(ev.row===E.CRIB_ROW) c.reveal=true;
     c.label=ROW_LABELS[ev.row]; c.sub= ev.row===E.CRIB_ROW ? 'the crib turns over…' : 'counting…';
@@ -172,6 +176,52 @@ function calloutHTML(prefix, c){
    Stars: 1 to 3 per level by margin. Progress saves to your account when
    signed in; otherwise it lives for the session.
    ==================================================================== */
+/* XP and player levels: wins and Conquest clears earn experience.
+   Level n to n+1 costs 100*n xp. Banners unlock by player level or
+   total Conquest stars; the equipped banner shows on your profile. */
+const XP_AWARDS = { matchWin: 100, matchTie: 40, matchLoss: 20, conquestRepeat: 10 };
+const conquestClearXp = (stars) => 50 + 15 * stars;
+function levelFromXp(xp) {
+  let level = 1, need = 100, x = xp || 0;
+  while (x >= need) { x -= need; level++; need = 100 * level; }
+  return { level, into: x, need };
+}
+function addXp(n, why) {
+  if (!S.uid || !S.profile) return 0;
+  S.profile.xp = (S.profile.xp || 0) + n;
+  if (fdb) fdb.ref('users/' + S.uid + '/xp').set(S.profile.xp).catch(() => {});
+  pushLeaderboard();
+  return n;
+}
+const BANNERS = [
+  { id: 'lacquer',  name: 'Lacquer',     css: 'linear-gradient(100deg,#41221C,#2B1714)',          need: () => true,                         needText: 'default' },
+  { id: 'jade',     name: 'Jade tide',   css: 'linear-gradient(100deg,#2C6557,#1d4a3f)',          need: (l,s) => l >= 3,                    needText: 'player level 3' },
+  { id: 'wave',     name: 'Gold wave',   css: 'linear-gradient(100deg,#8A6F1F,#41221C)',          need: (l,s) => l >= 5,                    needText: 'player level 5' },
+  { id: 'blossom',  name: 'Plum blossom',css: 'linear-gradient(100deg,#B5402F,#6e2018)',          need: (l,s) => l >= 8,                    needText: 'player level 8' },
+  { id: 'lantern',  name: 'Lantern glow',css: 'linear-gradient(100deg,#C9A227,#B5402F)',          need: (l,s) => l >= 12,                   needText: 'player level 12' },
+  { id: 'bamboo',   name: 'Bamboo grove',css: 'linear-gradient(100deg,#3E8E7E,#8A6F1F)',          need: (l,s) => s >= 10,                   needText: '10 Conquest stars' },
+  { id: 'cloud',    name: 'Gold cloud',  css: 'linear-gradient(100deg,#C9A227,#7A86B8)',          need: (l,s) => s >= 30,                   needText: '30 Conquest stars' },
+  { id: 'dragon',   name: 'Dragon',      css: 'linear-gradient(100deg,#B5402F,#C9A227,#3E8E7E)',  need: (l,s,c) => c >= 24,                 needText: 'clear all 24 levels' },
+];
+const totalStars = (camp) => Object.values((camp || S.campaign).stars || {}).reduce((n, v) => n + v, 0);
+const clearedCount = (camp) => Object.keys((camp || S.campaign).stars || {}).length;
+function bannerUnlocked(b, prof, camp) {
+  const lvl = levelFromXp((prof || S.profile || {}).xp).level;
+  return b.need(lvl, totalStars(camp), clearedCount(camp));
+}
+function bannerById(id) { return BANNERS.find((b) => b.id === id) || BANNERS[0]; }
+function pushLeaderboard() {
+  if (!S.uid || !S.profile || S.profile.provider === 'guest' || !fdb) return;
+  fdb.ref('leaderboard/' + S.uid).set({
+    name: S.profile.name,
+    stars: totalStars(),
+    cleared: clearedCount(),
+    level: S.campaign.level,
+    plevel: levelFromXp(S.profile.xp).level,
+    banner: S.profile.banner || 'lacquer',
+  }).catch(() => {});
+}
+
 const MAX_LIVES = 5;
 const LIFE_MS = () => (typeof window.__lifeMs === 'number' ? window.__lifeMs : 30 * 60 * 1000);
 
@@ -231,7 +281,8 @@ function nextLifeIn(){
   return Math.max(0, LIFE_MS() - (Date.now() - c.lastLifeAt));
 }
 function saveCampaign(){
-  if (S.uid) fdb.ref('users/' + S.uid + '/campaign').set(S.campaign).catch(() => {});
+  if (S.uid && fdb) fdb.ref('users/' + S.uid + '/campaign').set(S.campaign).catch(() => {});
+  pushLeaderboard();
 }
 function mergeCampaign(stored){
   if (!stored) return;
@@ -293,10 +344,34 @@ function startMapTick(){
     if (S.campaign.lives !== before) renderMap();
   }, 1000);
 }
+/** Conquest is an online, account-bound mode. Guests are asked to sign in with Google. */
 function openMap(){
+  if (!S.uid || !S.profile || S.profile.provider === 'guest'){
+    show('online'); oShow(S.uid ? 'lobby' : 'auth');
+    return;
+  }
   show('map');
   renderMap();
   startMapTick();
+}
+function renderConquestPanel(){
+  const box=$('o-conquest'); if(!box) return;
+  if (!S.uid){ box.innerHTML='<div class="pub-empty">Sign in to play Conquest.</div>'; return; }
+  if (S.profile.provider==='guest'){
+    box.innerHTML='<div class="pub-empty">Conquest, friends and leaderboards need a Google sign-in. Guest sessions stay casual.</div>';
+    return;
+  }
+  refreshLives();
+  const c=S.campaign;
+  box.innerHTML=`<div class="pub-item"><div class="who">Level ${c.level} of ${LEVELS.length}
+      <span class="age">${totalStars()} ★ · ${'❤'.repeat(c.lives)}${'♡'.repeat(MAX_LIVES-c.lives)}</span></div>
+    <button class="btn btn-primary" id="go-conquest">Play</button></div>`;
+  $('go-conquest').addEventListener('click',openMap);
+}
+function renderLobbyGates(){
+  const guest = S.profile && S.profile.provider==='guest';
+  const fr=$('lobby-friends'); if(fr) fr.classList.toggle('hidden', !S.uid || guest);
+  renderConquestPanel();
 }
 
 /* ---------- level intro ---------- */
@@ -360,6 +435,8 @@ function challengeWin(stars){
   const ch = S.challenge; if (!ch) return;
   const lv = ch.level;
   const c = S.campaign;
+  const firstClear = !(c.stars[lv.id] > 0);
+  const xp = addXp(firstClear ? conquestClearXp(stars) : XP_AWARDS.conquestRepeat, 'conquest');
   c.stars[lv.id] = Math.max(c.stars[lv.id] || 0, stars);
   if (lv.id >= c.level && lv.id < LEVELS.length) c.level = lv.id + 1;
   saveCampaign();
@@ -367,7 +444,7 @@ function challengeWin(stars){
   $('dcr-eyebrow').textContent = 'Level ' + lv.id + ' cleared';
   $('dcr-title').textContent = lv.name;
   $('dcr-stars').textContent = '★'.repeat(stars) + '☆'.repeat(3 - stars);
-  $('dcr-sub').textContent = lv.id < LEVELS.length ? 'The path continues.' : 'You have cleared the whole map. Remarkable.';
+  $('dcr-sub').textContent = (lv.id < LEVELS.length ? 'The path continues.' : 'You have conquered the whole map. Remarkable.') + ` · +${xp} xp`;
   $('dcr-retry').classList.add('hidden');
   $('dcr-next').classList.toggle('hidden', lv.id >= LEVELS.length);
   S.lastClearedLevel = lv.id;
@@ -416,8 +493,14 @@ function renderGame(){
     const lv=S.challenge.level;
     const budget = lv.type==='ai' ? '' : ` / ${lv.rounds}`;
     $('g-round').textContent = `Level ${lv.id} · Round ${m.roundsPlayed[seat]+1}${budget}`;
+    $('g-goal').textContent = 'Goal: ' + (
+      lv.type==='solo' ? `reach 29 within ${lv.rounds} rounds`
+      : lv.type==='bestRound' ? `score ${lv.score}+ in a single round`
+      : `beat ${S.players[1].name}` + (lv.handicap ? ` (they start +${lv.handicap})` : ''));
+    $('g-goal').classList.remove('hidden');
   } else {
     $('g-round').textContent = `Round ${m.roundsPlayed[seat]+1}`;
+    $('g-goal').classList.add('hidden');
   }
   const lanes = S.mode==='solo'
     ? [{name:'You', total:m.totals[0]}]
@@ -457,7 +540,8 @@ function onRoundComplete(){
   const {handTotal,net}=result;
   if (S.players[S.match.turn].kind==='human') recordHand(result.rowScores, handTotal);
   $('ds-hands').innerHTML=result.rowScores.map((sc,i)=>
-    `<div class="ds-row"><span class="nm">${ROW_LABELS[i]}</span><span class="bd">${breakdownHTML(sc)}</span><b>${sc.total}</b></div>`).join('');
+    `<div class="ds-row"><span class="nm">${ROW_LABELS[i]}</span><span class="bd">${breakdownHTML(sc)}</span><b>${sc.total}</b></div>`).join('')
+    + (result.heels ? `<div class="ds-row"><span class="nm">Starter</span><span class="bd">his heels, a Jack turned</span><b>2</b></div>` : '');
   $('ds-eyebrow').textContent= S.mode==='solo' ? 'Round complete' : `${esc(S.players[S.match.turn].name)} · round complete`;
   $('ds-line').innerHTML=`${handTotal} <span class="dim">− 29 =</span> <span class="${net>=0?'pos':'neg'}">${net>=0?'+':''}${net}</span>`;
   $('ds-sub').textContent= net>=0 ? 'Pegging up the rail.' : 'Under par. pegging backwards.';
@@ -668,6 +752,7 @@ function recordMatchEnd(room){
     } else st.losses=(st.losses||0)+1;
     if(rounds>(st.longestGame||0)) st.longestGame=rounds;
   });
+  addXp(room.result==='tie' ? XP_AWARDS.matchTie : room.result==='p'+S.seat ? XP_AWARDS.matchWin : XP_AWARDS.matchLoss, 'match');
   fdb.ref('users/'+S.uid+'/games/'+S.code).remove().catch(()=>{});
 }
 function trackGame(code){
@@ -774,15 +859,43 @@ async function openProfile(uid){
   if(!prof) return;
   const st={...blankStats(),...(prof.stats||{})};
   st.currentGames=self?gamesCount:undefined;
+  const camp = self ? S.campaign : (prof.campaign || { level: 1, stars: {} });
+  const lv = levelFromXp(prof.xp);
   const grid=STAT_LABELS
     .filter(([k])=>!(k==='currentGames'&&!self))
-    .map(([k,label])=>`<div class="stat"><div class="sv">${k==='currentGames'?gamesCount:(st[k]||0)}${(k==='fastestWin'||k==='longestGame')&&st[k]?' r':''}</div><div class="sl">${label}</div></div>`).join('');
+    .map(([k,label])=>`<div class="stat"><div class="sv">${k==='currentGames'?gamesCount:(st[k]||0)}${(k==='fastestWin'||k==='longestGame')&&st[k]?' r':''}</div><div class="sl">${label}</div></div>`)
+    .join('')
+    + `<div class="stat"><div class="sv">${clearedCount(camp)}</div><div class="sl">Conquest cleared</div></div>`
+    + `<div class="stat"><div class="sv">${totalStars(camp)}</div><div class="sl">Conquest stars</div></div>`;
   const isFriend=!self && S.friends && uid in S.friends;
+  const banner=bannerById(prof.banner);
+  $('dp-banner').style.background=banner.css;
   $('dp-name').textContent=prof.name||'Player';
+  $('dp-level').textContent='Lv '+lv.level;
+  $('dp-xp').style.width=Math.round((lv.into/lv.need)*100)+'%';
   $('dp-sub').textContent= self
-    ? `your friend code: ${prof.friendCode||'-'}`
+    ? `your friend code: ${prof.friendCode||'-'} · ${lv.into}/${lv.need} xp to level ${lv.level+1}`
     : (prof.online?'online now':'offline');
   $('dp-stats').innerHTML=grid;
+  const pick=$('dp-banners');
+  if (self && prof.provider!=='guest'){
+    pick.classList.remove('hidden');
+    pick.innerHTML='<div class="sl" style="margin-bottom:6px">PROFILE BANNER</div>'+BANNERS.map((b)=>{
+      const open=bannerUnlocked(b, prof, camp);
+      const sel=(prof.banner||'lacquer')===b.id;
+      return `<button class="banner-swatch ${sel?'sel':''} ${open?'':'lockd'}" data-banner="${b.id}"
+        style="background:${b.css}" title="${b.name}${open?'':' (unlocks at '+b.needText+')'}" ${open?'':'disabled'}>${open?'':'🔒'}</button>`;
+    }).join('');
+    for(const b of pick.querySelectorAll('[data-banner]:not([disabled])'))
+      b.addEventListener('click',()=>{
+        S.profile.banner=b.dataset.banner;
+        if(fdb) fdb.ref('users/'+S.uid+'/banner').set(b.dataset.banner).catch(()=>{});
+        pushLeaderboard();
+        openProfile(null);
+      });
+  } else {
+    pick.classList.add('hidden'); pick.innerHTML='';
+  }
   $('dp-extra').innerHTML= self
     ? (gameCodes.length?`<div class="dp-games">Active tables: ${gameCodes.map((c)=>`<button class="btn btn-ghost mini" data-rejoin="${c}">${c}</button>`).join(' ')}</div>`:'')
       +`<div class="join-row" style="margin-top:12px"><input type="text" id="dp-rename" maxlength="16" placeholder="change display name"><button class="btn btn-ghost" id="dp-rename-go">rename</button></div>`
@@ -810,14 +923,40 @@ async function openProfile(uid){
   $('d-profile').showModal();
 }
 
+async function openBoard(tab){
+  S.boardTab = tab || S.boardTab || 'global';
+  let rows=[];
+  try{
+    const snap=await fdb.ref('leaderboard').get();
+    const all=snap.exists()?snap.val():{};
+    rows=Object.entries(all).map(([uid,v])=>({uid,...v}));
+    if(S.boardTab==='friends') rows=rows.filter((r)=>r.uid===S.uid||(S.friends&&r.uid in S.friends));
+  }catch(e){}
+  rows.sort((a,b)=>(b.stars||0)-(a.stars||0)||(b.cleared||0)-(a.cleared||0)||(b.plevel||0)-(a.plevel||0));
+  rows=rows.slice(0,20);
+  const trophies=['🥇','🥈','🥉'];
+  $('db-list').innerHTML = rows.length===0
+    ? '<div class="pub-empty">Nobody on the board yet.</div>'
+    : rows.map((r,i)=>`<div class="board-row ${r.uid===S.uid?'me':''}">
+        <span class="rank">${trophies[i]||'#'+(i+1)}</span>
+        <span class="bswatch" style="background:${bannerById(r.banner).css}"></span>
+        <span class="bname">${esc(r.name||'Player')} <span class="age">Lv ${r.plevel||1}</span></span>
+        <span class="bstars">${r.stars||0} ★</span>
+      </div>`).join('');
+  $('db-global').setAttribute('aria-pressed', String(S.boardTab==='global'));
+  $('db-friends').setAttribute('aria-pressed', String(S.boardTab==='friends'));
+  if(!$('d-board').open) $('d-board').showModal();
+}
+
 function renderAccount(){
   const bar=$('o-account'); if(!bar) return;
-  if(!S.uid||!S.profile){ bar.innerHTML=''; return; }
+  if(!S.uid||!S.profile){ bar.innerHTML=''; renderLobbyGates(); return; }
   bar.innerHTML=`<span class="chip"><span class="dot on"></span>${esc(S.profile.name)}</span>
     <button class="btn btn-ghost mini" id="acct-profile">profile</button>
     <button class="btn btn-ghost mini" id="acct-out">sign out</button>`;
   $('acct-profile').addEventListener('click',()=>openProfile(null));
   $('acct-out').addEventListener('click',doSignOut);
+  renderLobbyGates();
 }
 
 /* ====================================================================
@@ -1258,8 +1397,17 @@ function renderOnline(){
    WIRING
    ==================================================================== */
 $('tile-solo').addEventListener('click',()=>startMatch('solo'));
-$('tile-map').addEventListener('click',openMap);
-$('map-back').addEventListener('click',()=>{ if(S.mapTick) clearInterval(S.mapTick); show('home'); });
+$('splash-offline').addEventListener('click',()=>{
+  $('offline-tiles').classList.toggle('hidden');
+  $('splash-offline').setAttribute('aria-expanded', String(!$('offline-tiles').classList.contains('hidden')));
+});
+$('splash-online').addEventListener('click',openOnline);
+$('map-back').addEventListener('click',()=>{ if(S.mapTick) clearInterval(S.mapTick); show('online'); oShow('lobby'); });
+$('map-board').addEventListener('click',()=>openBoard());
+$('map-board-lobby').addEventListener('click',()=>openBoard());
+$('db-global').addEventListener('click',()=>openBoard('global'));
+$('db-friends').addEventListener('click',()=>openBoard('friends'));
+$('db-close').addEventListener('click',()=>$('d-board').close());
 $('dl-play').addEventListener('click',startLevel);
 $('dl-close').addEventListener('click',()=>$('d-level').close());
 $('dcr-map').addEventListener('click',()=>{ $('d-chal').close(); openMap(); });
@@ -1267,10 +1415,9 @@ $('dcr-retry').addEventListener('click',()=>{ $('d-chal').close(); startLevel();
 $('dcr-next').addEventListener('click',()=>{ $('d-chal').close();
   const nxt=LEVELS.find((x)=>x.id===(S.lastClearedLevel||0)+1);
   if(nxt){ S.pendingLevel=nxt; startLevel(); } else openMap(); });
-window.__cc={ get S(){return S;}, LEVELS, challengeWin, challengeFail, refreshLives, renderMap, openLevel };
+window.__cc={ get S(){return S;}, LEVELS, challengeWin, challengeFail, refreshLives, renderMap, openLevel, openMap, levelFromXp, totalStars };
 $('tile-ai').addEventListener('click',(e)=>{ if(e.target.closest('.pill')) return; startMatch('ai'); });
 $('tile-pass').addEventListener('click',()=>startMatch('pass'));
-$('tile-online').addEventListener('click',openOnline);
 for (const p of document.querySelectorAll('#diff-picker .pill')){
   const pick=()=>{ S.difficulty=p.dataset.d;
     document.querySelectorAll('#diff-picker .pill').forEach(x=>x.setAttribute('aria-pressed',String(x===p))); };

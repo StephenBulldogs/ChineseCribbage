@@ -166,6 +166,33 @@
   .chip.clicky{cursor:pointer}.chip.clicky:hover{border-color:var(--brass)}
   .dp-games{margin-top:12px;font-size:12px;color:var(--cream-dim);line-height:2}
   #d-profile{max-width:420px}
+  .splash{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px}
+  .splash-tile{background:rgba(28,14,12,.78);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+    border:1px solid var(--lacquer-edge);border-radius:18px;padding:34px 24px;text-align:left;
+    transition:border-color .15s,transform .15s}
+  .splash-tile:hover{border-color:var(--brass);transform:translateY(-3px)}
+  .splash-tile h2{font-family:var(--display);font-size:30px;margin-bottom:8px}
+  .splash-tile p{color:var(--cream-dim);font-size:13.5px;line-height:1.55}
+  @media (max-width:560px){.splash{grid-template-columns:1fr}}
+  .goal{background:rgba(28,14,12,.88);border:1px solid var(--brass-dim);border-radius:10px;
+    padding:8px 14px;margin-bottom:12px;font-size:13px;color:var(--brass);font-weight:600}
+  .dp-banner{display:flex;align-items:center;justify-content:space-between;gap:10px;border-radius:12px;
+    padding:16px 16px;margin-top:10px;border:1px solid #00000033}
+  .dp-level{background:#00000055;border:1px solid #ffffff22;border-radius:999px;padding:4px 12px;
+    font-size:12px;font-weight:700;color:var(--cream)}
+  .xp-track{height:6px;border-radius:3px;background:var(--lacquer-deep);margin:8px 0 6px;overflow:hidden}
+  .xp-fill{height:100%;background:var(--brass);width:0%}
+  #dp-banners{margin-top:12px}
+  .banner-swatch{width:46px;height:30px;border-radius:8px;border:2px solid transparent;margin:0 6px 6px 0;
+    font-size:13px;color:var(--cream)}
+  .banner-swatch.sel{border-color:var(--cream)}
+  .banner-swatch.lockd{opacity:.45}
+  .board-row{display:grid;grid-template-columns:44px 26px 1fr auto;gap:10px;align-items:center;
+    padding:8px 4px;border-bottom:1px solid var(--lacquer-edge);font-size:13px}
+  .board-row.me{background:#C9A22715;border-radius:8px}
+  .board-row .rank{font-size:16px}
+  .board-row .bswatch{width:22px;height:14px;border-radius:4px;display:inline-block}
+  .board-row .bstars{color:var(--brass);font-weight:700}
   .lives-bar{display:flex;align-items:center;gap:12px;margin:2px 0 10px;font-size:20px;color:var(--ink-red);
     text-shadow:0 1px 6px rgba(0,0,0,.7)}
   .lives-bar .dimheart{color:var(--cream-dim);opacity:.6}
@@ -252,21 +279,21 @@
 
   <!-- ============ HOME ============ -->
   <main id="view-home">
-    <section class="hero">
-      <div class="kicker">FIVE HANDS · ONE STARTER · PAR 29</div>
-      <h1>Twenty cards.<br>Place them well.</h1>
-      <p>Five cribbage hands, par 29. First one home wins.</p>
-    </section>
+    <div class="splash">
+      <button class="splash-tile" id="splash-offline" aria-expanded="false">
+        <h2>Offline play</h2>
+        <p>Solo runs · versus AI · pass and play. No account, no connection.</p>
+      </button>
+      <button class="splash-tile" id="splash-online">
+        <h2>Online play</h2>
+        <p>Tables for 2 to 4 · Conquest · friends and leaderboards. Sign in or play as guest.</p>
+      </button>
+    </div>
 
-    <div class="tiles">
+    <div class="tiles hidden" id="offline-tiles">
       <button class="tile" id="tile-solo">
         <h2>Solo run</h2>
         <p>You against the deck. Reach 29 fast.</p>
-        <span class="tag">PLAYS OFFLINE</span>
-      </button>
-      <button class="tile" id="tile-map">
-        <h2>Challenge map</h2>
-        <p>24 levels, rising stakes. 5 hearts.</p>
         <span class="tag">PLAYS OFFLINE</span>
       </button>
       <button class="tile" id="tile-ai">
@@ -284,11 +311,6 @@
         <p>Two players, one screen.</p>
         <span class="tag">PLAYS OFFLINE</span>
       </button>
-      <button class="tile" id="tile-online">
-        <h2>Online duel</h2>
-        <p>2–4 players · AI seat-fillers · live tables.</p>
-        <span class="tag">NEEDS A CONNECTION</span>
-      </button>
     </div>
 
 
@@ -297,6 +319,7 @@
   <!-- ============ GAME ============ -->
   <main id="view-game" class="hidden">
     <div class="board-head"><h2 id="g-round">Round 1</h2></div>
+    <div class="goal hidden" id="g-goal"></div>
     <div class="rail" id="g-rail"></div>
     <div class="draw">
       <div>
@@ -312,8 +335,11 @@
   <!-- ============ MAP ============ -->
   <main id="view-map" class="hidden">
     <div class="board-head">
-      <h2>Challenge map</h2>
-      <button class="btn btn-ghost" id="map-back">Back</button>
+      <h2>Conquest</h2>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" id="map-board">Leaderboard</button>
+        <button class="btn btn-ghost" id="map-back">Back</button>
+      </div>
     </div>
     <div class="lives-bar"><span id="map-lives"></span><span class="age" id="map-timer"></span></div>
     <div id="map-path"></div>
@@ -350,11 +376,15 @@
         <button class="btn btn-ghost" id="o-join">Join</button>
       </div>
       <div class="err hidden" id="o-err"></div>
+      <div class="pub" id="lobby-conquest">
+        <h3>Conquest <button class="btn btn-ghost mini" id="map-board-lobby" style="float:right">leaderboard</button></h3>
+        <div id="o-conquest"><div class="pub-empty">Sign in to play Conquest.</div></div>
+      </div>
       <div class="pub">
         <h3>Open tables</h3>
         <div id="o-public"><div class="pub-empty">Looking for open tables…</div></div>
       </div>
-      <div class="pub">
+      <div class="pub" id="lobby-friends">
         <h3>Friends <span class="age">your code: <b id="my-friend-code">-</b></span></h3>
         <div id="o-friends-list"><div class="pub-empty">No friends yet. swap codes to add one.</div></div>
         <div class="join-row" style="margin-top:10px">
@@ -392,6 +422,15 @@
   </main>
 
   <!-- ============ DIALOGS ============ -->
+  <dialog id="d-board">
+    <div class="d-eyebrow">Conquest leaderboard</div>
+    <div class="vis-row" style="margin-top:10px">
+      <span class="pill" role="button" tabindex="0" id="db-global" aria-pressed="true">global</span>
+      <span class="pill" role="button" tabindex="0" id="db-friends" aria-pressed="false">friends</span>
+    </div>
+    <div id="db-list"></div>
+    <button class="btn btn-ghost" id="db-close" style="margin-top:14px">Close</button>
+  </dialog>
   <dialog id="d-level">
     <div class="d-eyebrow" id="dl-eyebrow">Level</div>
     <div class="d-big" id="dl-name"></div>
@@ -411,8 +450,13 @@
   </dialog>
   <dialog id="d-profile">
     <div class="d-eyebrow">Player profile</div>
-    <div class="d-big" id="dp-name"></div>
+    <div class="dp-banner" id="dp-banner">
+      <div class="d-big" id="dp-name" style="margin:0"></div>
+      <span class="dp-level" id="dp-level">Lv 1</span>
+    </div>
+    <div class="xp-track"><div class="xp-fill" id="dp-xp"></div></div>
     <div class="d-sub" id="dp-sub"></div>
+    <div id="dp-banners" class="hidden"></div>
     <div class="stats-grid" id="dp-stats"></div>
     <div id="dp-extra"></div>
     <button class="btn btn-ghost" id="dp-close" style="margin-top:14px">Close</button>
@@ -925,6 +969,7 @@ function countDelay(ev){
 function startCount(round, prefix, done){
   cancelCount();
   const queue=[];
+  if (round.starter && round.starter.rank===11) queue.push({t:'heels'});
   for(let r=0;r<5;r++){
     const det=E.scoreHandDetail(round.rows[r], round.starter, r===E.CRIB_ROW);
     queue.push({t:'row', row:r});
@@ -939,7 +984,10 @@ function stepCount(){
   const c=S.count; if(!c||!c.active) return;
   if(c.pos>=c.queue.length) return finishCount();
   const ev=c.queue[c.pos++];
-  if(ev.t==='row'){
+  if(ev.t==='heels'){
+    c.row=-1; c.set=new Set([4]);
+    c.label='His heels'; c.sub='+2. The starter is a Jack.';
+  } else if(ev.t==='row'){
     c.row=ev.row; c.set=new Set();
     if(ev.row===E.CRIB_ROW) c.reveal=true;
     c.label=ROW_LABELS[ev.row]; c.sub= ev.row===E.CRIB_ROW ? 'the crib turns over…' : 'counting…';
@@ -990,6 +1038,52 @@ function calloutHTML(prefix, c){
    Stars: 1 to 3 per level by margin. Progress saves to your account when
    signed in; otherwise it lives for the session.
    ==================================================================== */
+/* XP and player levels: wins and Conquest clears earn experience.
+   Level n to n+1 costs 100*n xp. Banners unlock by player level or
+   total Conquest stars; the equipped banner shows on your profile. */
+const XP_AWARDS = { matchWin: 100, matchTie: 40, matchLoss: 20, conquestRepeat: 10 };
+const conquestClearXp = (stars) => 50 + 15 * stars;
+function levelFromXp(xp) {
+  let level = 1, need = 100, x = xp || 0;
+  while (x >= need) { x -= need; level++; need = 100 * level; }
+  return { level, into: x, need };
+}
+function addXp(n, why) {
+  if (!S.uid || !S.profile) return 0;
+  S.profile.xp = (S.profile.xp || 0) + n;
+  if (fdb) fdb.ref('users/' + S.uid + '/xp').set(S.profile.xp).catch(() => {});
+  pushLeaderboard();
+  return n;
+}
+const BANNERS = [
+  { id: 'lacquer',  name: 'Lacquer',     css: 'linear-gradient(100deg,#41221C,#2B1714)',          need: () => true,                         needText: 'default' },
+  { id: 'jade',     name: 'Jade tide',   css: 'linear-gradient(100deg,#2C6557,#1d4a3f)',          need: (l,s) => l >= 3,                    needText: 'player level 3' },
+  { id: 'wave',     name: 'Gold wave',   css: 'linear-gradient(100deg,#8A6F1F,#41221C)',          need: (l,s) => l >= 5,                    needText: 'player level 5' },
+  { id: 'blossom',  name: 'Plum blossom',css: 'linear-gradient(100deg,#B5402F,#6e2018)',          need: (l,s) => l >= 8,                    needText: 'player level 8' },
+  { id: 'lantern',  name: 'Lantern glow',css: 'linear-gradient(100deg,#C9A227,#B5402F)',          need: (l,s) => l >= 12,                   needText: 'player level 12' },
+  { id: 'bamboo',   name: 'Bamboo grove',css: 'linear-gradient(100deg,#3E8E7E,#8A6F1F)',          need: (l,s) => s >= 10,                   needText: '10 Conquest stars' },
+  { id: 'cloud',    name: 'Gold cloud',  css: 'linear-gradient(100deg,#C9A227,#7A86B8)',          need: (l,s) => s >= 30,                   needText: '30 Conquest stars' },
+  { id: 'dragon',   name: 'Dragon',      css: 'linear-gradient(100deg,#B5402F,#C9A227,#3E8E7E)',  need: (l,s,c) => c >= 24,                 needText: 'clear all 24 levels' },
+];
+const totalStars = (camp) => Object.values((camp || S.campaign).stars || {}).reduce((n, v) => n + v, 0);
+const clearedCount = (camp) => Object.keys((camp || S.campaign).stars || {}).length;
+function bannerUnlocked(b, prof, camp) {
+  const lvl = levelFromXp((prof || S.profile || {}).xp).level;
+  return b.need(lvl, totalStars(camp), clearedCount(camp));
+}
+function bannerById(id) { return BANNERS.find((b) => b.id === id) || BANNERS[0]; }
+function pushLeaderboard() {
+  if (!S.uid || !S.profile || S.profile.provider === 'guest' || !fdb) return;
+  fdb.ref('leaderboard/' + S.uid).set({
+    name: S.profile.name,
+    stars: totalStars(),
+    cleared: clearedCount(),
+    level: S.campaign.level,
+    plevel: levelFromXp(S.profile.xp).level,
+    banner: S.profile.banner || 'lacquer',
+  }).catch(() => {});
+}
+
 const MAX_LIVES = 5;
 const LIFE_MS = () => (typeof window.__lifeMs === 'number' ? window.__lifeMs : 30 * 60 * 1000);
 
@@ -1049,7 +1143,8 @@ function nextLifeIn(){
   return Math.max(0, LIFE_MS() - (Date.now() - c.lastLifeAt));
 }
 function saveCampaign(){
-  if (S.uid) fdb.ref('users/' + S.uid + '/campaign').set(S.campaign).catch(() => {});
+  if (S.uid && fdb) fdb.ref('users/' + S.uid + '/campaign').set(S.campaign).catch(() => {});
+  pushLeaderboard();
 }
 function mergeCampaign(stored){
   if (!stored) return;
@@ -1111,10 +1206,34 @@ function startMapTick(){
     if (S.campaign.lives !== before) renderMap();
   }, 1000);
 }
+/** Conquest is an online, account-bound mode. Guests are asked to sign in with Google. */
 function openMap(){
+  if (!S.uid || !S.profile || S.profile.provider === 'guest'){
+    show('online'); oShow(S.uid ? 'lobby' : 'auth');
+    return;
+  }
   show('map');
   renderMap();
   startMapTick();
+}
+function renderConquestPanel(){
+  const box=$('o-conquest'); if(!box) return;
+  if (!S.uid){ box.innerHTML='<div class="pub-empty">Sign in to play Conquest.</div>'; return; }
+  if (S.profile.provider==='guest'){
+    box.innerHTML='<div class="pub-empty">Conquest, friends and leaderboards need a Google sign-in. Guest sessions stay casual.</div>';
+    return;
+  }
+  refreshLives();
+  const c=S.campaign;
+  box.innerHTML=`<div class="pub-item"><div class="who">Level ${c.level} of ${LEVELS.length}
+      <span class="age">${totalStars()} ★ · ${'❤'.repeat(c.lives)}${'♡'.repeat(MAX_LIVES-c.lives)}</span></div>
+    <button class="btn btn-primary" id="go-conquest">Play</button></div>`;
+  $('go-conquest').addEventListener('click',openMap);
+}
+function renderLobbyGates(){
+  const guest = S.profile && S.profile.provider==='guest';
+  const fr=$('lobby-friends'); if(fr) fr.classList.toggle('hidden', !S.uid || guest);
+  renderConquestPanel();
 }
 
 /* ---------- level intro ---------- */
@@ -1178,6 +1297,8 @@ function challengeWin(stars){
   const ch = S.challenge; if (!ch) return;
   const lv = ch.level;
   const c = S.campaign;
+  const firstClear = !(c.stars[lv.id] > 0);
+  const xp = addXp(firstClear ? conquestClearXp(stars) : XP_AWARDS.conquestRepeat, 'conquest');
   c.stars[lv.id] = Math.max(c.stars[lv.id] || 0, stars);
   if (lv.id >= c.level && lv.id < LEVELS.length) c.level = lv.id + 1;
   saveCampaign();
@@ -1185,7 +1306,7 @@ function challengeWin(stars){
   $('dcr-eyebrow').textContent = 'Level ' + lv.id + ' cleared';
   $('dcr-title').textContent = lv.name;
   $('dcr-stars').textContent = '★'.repeat(stars) + '☆'.repeat(3 - stars);
-  $('dcr-sub').textContent = lv.id < LEVELS.length ? 'The path continues.' : 'You have cleared the whole map. Remarkable.';
+  $('dcr-sub').textContent = (lv.id < LEVELS.length ? 'The path continues.' : 'You have conquered the whole map. Remarkable.') + ` · +${xp} xp`;
   $('dcr-retry').classList.add('hidden');
   $('dcr-next').classList.toggle('hidden', lv.id >= LEVELS.length);
   S.lastClearedLevel = lv.id;
@@ -1234,8 +1355,14 @@ function renderGame(){
     const lv=S.challenge.level;
     const budget = lv.type==='ai' ? '' : ` / ${lv.rounds}`;
     $('g-round').textContent = `Level ${lv.id} · Round ${m.roundsPlayed[seat]+1}${budget}`;
+    $('g-goal').textContent = 'Goal: ' + (
+      lv.type==='solo' ? `reach 29 within ${lv.rounds} rounds`
+      : lv.type==='bestRound' ? `score ${lv.score}+ in a single round`
+      : `beat ${S.players[1].name}` + (lv.handicap ? ` (they start +${lv.handicap})` : ''));
+    $('g-goal').classList.remove('hidden');
   } else {
     $('g-round').textContent = `Round ${m.roundsPlayed[seat]+1}`;
+    $('g-goal').classList.add('hidden');
   }
   const lanes = S.mode==='solo'
     ? [{name:'You', total:m.totals[0]}]
@@ -1275,7 +1402,8 @@ function onRoundComplete(){
   const {handTotal,net}=result;
   if (S.players[S.match.turn].kind==='human') recordHand(result.rowScores, handTotal);
   $('ds-hands').innerHTML=result.rowScores.map((sc,i)=>
-    `<div class="ds-row"><span class="nm">${ROW_LABELS[i]}</span><span class="bd">${breakdownHTML(sc)}</span><b>${sc.total}</b></div>`).join('');
+    `<div class="ds-row"><span class="nm">${ROW_LABELS[i]}</span><span class="bd">${breakdownHTML(sc)}</span><b>${sc.total}</b></div>`).join('')
+    + (result.heels ? `<div class="ds-row"><span class="nm">Starter</span><span class="bd">his heels, a Jack turned</span><b>2</b></div>` : '');
   $('ds-eyebrow').textContent= S.mode==='solo' ? 'Round complete' : `${esc(S.players[S.match.turn].name)} · round complete`;
   $('ds-line').innerHTML=`${handTotal} <span class="dim">− 29 =</span> <span class="${net>=0?'pos':'neg'}">${net>=0?'+':''}${net}</span>`;
   $('ds-sub').textContent= net>=0 ? 'Pegging up the rail.' : 'Under par. pegging backwards.';
@@ -1486,6 +1614,7 @@ function recordMatchEnd(room){
     } else st.losses=(st.losses||0)+1;
     if(rounds>(st.longestGame||0)) st.longestGame=rounds;
   });
+  addXp(room.result==='tie' ? XP_AWARDS.matchTie : room.result==='p'+S.seat ? XP_AWARDS.matchWin : XP_AWARDS.matchLoss, 'match');
   fdb.ref('users/'+S.uid+'/games/'+S.code).remove().catch(()=>{});
 }
 function trackGame(code){
@@ -1592,15 +1721,43 @@ async function openProfile(uid){
   if(!prof) return;
   const st={...blankStats(),...(prof.stats||{})};
   st.currentGames=self?gamesCount:undefined;
+  const camp = self ? S.campaign : (prof.campaign || { level: 1, stars: {} });
+  const lv = levelFromXp(prof.xp);
   const grid=STAT_LABELS
     .filter(([k])=>!(k==='currentGames'&&!self))
-    .map(([k,label])=>`<div class="stat"><div class="sv">${k==='currentGames'?gamesCount:(st[k]||0)}${(k==='fastestWin'||k==='longestGame')&&st[k]?' r':''}</div><div class="sl">${label}</div></div>`).join('');
+    .map(([k,label])=>`<div class="stat"><div class="sv">${k==='currentGames'?gamesCount:(st[k]||0)}${(k==='fastestWin'||k==='longestGame')&&st[k]?' r':''}</div><div class="sl">${label}</div></div>`)
+    .join('')
+    + `<div class="stat"><div class="sv">${clearedCount(camp)}</div><div class="sl">Conquest cleared</div></div>`
+    + `<div class="stat"><div class="sv">${totalStars(camp)}</div><div class="sl">Conquest stars</div></div>`;
   const isFriend=!self && S.friends && uid in S.friends;
+  const banner=bannerById(prof.banner);
+  $('dp-banner').style.background=banner.css;
   $('dp-name').textContent=prof.name||'Player';
+  $('dp-level').textContent='Lv '+lv.level;
+  $('dp-xp').style.width=Math.round((lv.into/lv.need)*100)+'%';
   $('dp-sub').textContent= self
-    ? `your friend code: ${prof.friendCode||'-'}`
+    ? `your friend code: ${prof.friendCode||'-'} · ${lv.into}/${lv.need} xp to level ${lv.level+1}`
     : (prof.online?'online now':'offline');
   $('dp-stats').innerHTML=grid;
+  const pick=$('dp-banners');
+  if (self && prof.provider!=='guest'){
+    pick.classList.remove('hidden');
+    pick.innerHTML='<div class="sl" style="margin-bottom:6px">PROFILE BANNER</div>'+BANNERS.map((b)=>{
+      const open=bannerUnlocked(b, prof, camp);
+      const sel=(prof.banner||'lacquer')===b.id;
+      return `<button class="banner-swatch ${sel?'sel':''} ${open?'':'lockd'}" data-banner="${b.id}"
+        style="background:${b.css}" title="${b.name}${open?'':' (unlocks at '+b.needText+')'}" ${open?'':'disabled'}>${open?'':'🔒'}</button>`;
+    }).join('');
+    for(const b of pick.querySelectorAll('[data-banner]:not([disabled])'))
+      b.addEventListener('click',()=>{
+        S.profile.banner=b.dataset.banner;
+        if(fdb) fdb.ref('users/'+S.uid+'/banner').set(b.dataset.banner).catch(()=>{});
+        pushLeaderboard();
+        openProfile(null);
+      });
+  } else {
+    pick.classList.add('hidden'); pick.innerHTML='';
+  }
   $('dp-extra').innerHTML= self
     ? (gameCodes.length?`<div class="dp-games">Active tables: ${gameCodes.map((c)=>`<button class="btn btn-ghost mini" data-rejoin="${c}">${c}</button>`).join(' ')}</div>`:'')
       +`<div class="join-row" style="margin-top:12px"><input type="text" id="dp-rename" maxlength="16" placeholder="change display name"><button class="btn btn-ghost" id="dp-rename-go">rename</button></div>`
@@ -1628,14 +1785,40 @@ async function openProfile(uid){
   $('d-profile').showModal();
 }
 
+async function openBoard(tab){
+  S.boardTab = tab || S.boardTab || 'global';
+  let rows=[];
+  try{
+    const snap=await fdb.ref('leaderboard').get();
+    const all=snap.exists()?snap.val():{};
+    rows=Object.entries(all).map(([uid,v])=>({uid,...v}));
+    if(S.boardTab==='friends') rows=rows.filter((r)=>r.uid===S.uid||(S.friends&&r.uid in S.friends));
+  }catch(e){}
+  rows.sort((a,b)=>(b.stars||0)-(a.stars||0)||(b.cleared||0)-(a.cleared||0)||(b.plevel||0)-(a.plevel||0));
+  rows=rows.slice(0,20);
+  const trophies=['🥇','🥈','🥉'];
+  $('db-list').innerHTML = rows.length===0
+    ? '<div class="pub-empty">Nobody on the board yet.</div>'
+    : rows.map((r,i)=>`<div class="board-row ${r.uid===S.uid?'me':''}">
+        <span class="rank">${trophies[i]||'#'+(i+1)}</span>
+        <span class="bswatch" style="background:${bannerById(r.banner).css}"></span>
+        <span class="bname">${esc(r.name||'Player')} <span class="age">Lv ${r.plevel||1}</span></span>
+        <span class="bstars">${r.stars||0} ★</span>
+      </div>`).join('');
+  $('db-global').setAttribute('aria-pressed', String(S.boardTab==='global'));
+  $('db-friends').setAttribute('aria-pressed', String(S.boardTab==='friends'));
+  if(!$('d-board').open) $('d-board').showModal();
+}
+
 function renderAccount(){
   const bar=$('o-account'); if(!bar) return;
-  if(!S.uid||!S.profile){ bar.innerHTML=''; return; }
+  if(!S.uid||!S.profile){ bar.innerHTML=''; renderLobbyGates(); return; }
   bar.innerHTML=`<span class="chip"><span class="dot on"></span>${esc(S.profile.name)}</span>
     <button class="btn btn-ghost mini" id="acct-profile">profile</button>
     <button class="btn btn-ghost mini" id="acct-out">sign out</button>`;
   $('acct-profile').addEventListener('click',()=>openProfile(null));
   $('acct-out').addEventListener('click',doSignOut);
+  renderLobbyGates();
 }
 
 /* ====================================================================
@@ -2076,8 +2259,17 @@ function renderOnline(){
    WIRING
    ==================================================================== */
 $('tile-solo').addEventListener('click',()=>startMatch('solo'));
-$('tile-map').addEventListener('click',openMap);
-$('map-back').addEventListener('click',()=>{ if(S.mapTick) clearInterval(S.mapTick); show('home'); });
+$('splash-offline').addEventListener('click',()=>{
+  $('offline-tiles').classList.toggle('hidden');
+  $('splash-offline').setAttribute('aria-expanded', String(!$('offline-tiles').classList.contains('hidden')));
+});
+$('splash-online').addEventListener('click',openOnline);
+$('map-back').addEventListener('click',()=>{ if(S.mapTick) clearInterval(S.mapTick); show('online'); oShow('lobby'); });
+$('map-board').addEventListener('click',()=>openBoard());
+$('map-board-lobby').addEventListener('click',()=>openBoard());
+$('db-global').addEventListener('click',()=>openBoard('global'));
+$('db-friends').addEventListener('click',()=>openBoard('friends'));
+$('db-close').addEventListener('click',()=>$('d-board').close());
 $('dl-play').addEventListener('click',startLevel);
 $('dl-close').addEventListener('click',()=>$('d-level').close());
 $('dcr-map').addEventListener('click',()=>{ $('d-chal').close(); openMap(); });
@@ -2085,10 +2277,9 @@ $('dcr-retry').addEventListener('click',()=>{ $('d-chal').close(); startLevel();
 $('dcr-next').addEventListener('click',()=>{ $('d-chal').close();
   const nxt=LEVELS.find((x)=>x.id===(S.lastClearedLevel||0)+1);
   if(nxt){ S.pendingLevel=nxt; startLevel(); } else openMap(); });
-window.__cc={ get S(){return S;}, LEVELS, challengeWin, challengeFail, refreshLives, renderMap, openLevel };
+window.__cc={ get S(){return S;}, LEVELS, challengeWin, challengeFail, refreshLives, renderMap, openLevel, openMap, levelFromXp, totalStars };
 $('tile-ai').addEventListener('click',(e)=>{ if(e.target.closest('.pill')) return; startMatch('ai'); });
 $('tile-pass').addEventListener('click',()=>startMatch('pass'));
-$('tile-online').addEventListener('click',openOnline);
 for (const p of document.querySelectorAll('#diff-picker .pill')){
   const pick=()=>{ S.difficulty=p.dataset.d;
     document.querySelectorAll('#diff-picker .pill').forEach(x=>x.setAttribute('aria-pressed',String(x===p))); };
