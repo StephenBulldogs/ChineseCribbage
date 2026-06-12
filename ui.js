@@ -40,7 +40,7 @@ function cardHTML(card, size, faceDown, animate, glow){
   return `<div class="card ${size} ${red?'red':'black'} ${animate?'deal-in':''}${g}">
     <span class="corner">${txt}</span><span class="pip">${txt}</span></div>`;
 }
-/** lanes: [{name,total}] — one lane for solo, two for vs modes. */
+/** lanes: [{name,total}]. one lane for solo, two for vs modes. */
 function railHTML(lanes, activeIdx){
   const MIN=-15, MAX=35;
   const pct=(v)=>((Math.max(MIN,Math.min(MAX,v))-MIN)/(MAX-MIN))*100;
@@ -68,7 +68,7 @@ function rowsHTML(round, placeableFn, rowScores, count){
       ? (i<=count.row ? `<div class="row-score ${count.rowTotals[i]===0?'zero':''}">${count.rowTotals[i]}</div>` : '')
       : score ? `<div class="row-score ${score.total===0?'zero':''}">${score.total}</div><div class="row-break">${breakdownHTML(score)}</div>` : '';
     return `<button class="row-btn ${isCrib?'crib':''} ${placeable?'placeable':''} ${counting&&count.row===i?'count-row':''}"
-      data-row="${i}" ${placeable?'':'disabled'} aria-label="${isCrib?'Crib — deals itself':'Place card in '+ROW_LABELS[i]}">
+      data-row="${i}" ${placeable?'':'disabled'} aria-label="${isCrib?'Crib. deals itself':'Place card in '+ROW_LABELS[i]}">
       <div><div class="row-label">${ROW_LABELS[i]}${badge}</div>${scoreHTML}</div>
       <div class="row-cards">
         ${[0,1,2,3].map(k=>cards[k]
@@ -90,7 +90,7 @@ function breakdownHTML(sc){
 const esc=(s)=>String(s).replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 /* ====================================================================
-   THE COUNT — slow walkthrough of every combination, hand by hand
+   THE COUNT. slow walkthrough of every combination, hand by hand
    ==================================================================== */
 function comboLabel(c){
   return c.kind==='fifteen' ? 'Fifteen'
@@ -131,7 +131,7 @@ function stepCount(){
     c.sub=`+${ev.combo.pts} · ${ROW_LABELS[ev.row]} has ${c.rowTotals[ev.row]}`;
   } else {
     c.set=new Set();
-    c.label=`${ROW_LABELS[ev.row]} — ${ev.total}`;
+    c.label=`${ROW_LABELS[ev.row]}: ${ev.total}`;
     c.sub= ev.total===0 ? 'no count' : '';
   }
   renderCountView();
@@ -169,7 +169,7 @@ function startMatch(mode){
     ? [{name:'You',kind:'human'},{name:AI_NAMES[S.difficulty],kind:'ai'}]
     : mode==='pass'
       ? [{name:'Player 1',kind:'human'},{name:'Player 2',kind:'human'}]
-      : [{name:'You',kind:'human'},{name:'—',kind:'human'}]; // solo
+      : [{name:'You',kind:'human'},{name:'-',kind:'human'}]; // solo
   S.match = E.newMatch(0);
   S.round = E.newRound(S.match.roundSeed);
   S.lastResult = null;
@@ -222,7 +222,7 @@ function onRoundComplete(){
     `<div class="ds-row"><span class="nm">${ROW_LABELS[i]}</span><span class="bd">${breakdownHTML(sc)}</span><b>${sc.total}</b></div>`).join('');
   $('ds-eyebrow').textContent= S.mode==='solo' ? 'Round complete' : `${esc(S.players[S.match.turn].name)} · round complete`;
   $('ds-line').innerHTML=`${handTotal} <span class="dim">− 29 =</span> <span class="${net>=0?'pos':'neg'}">${net>=0?'+':''}${net}</span>`;
-  $('ds-sub').textContent= net>=0 ? 'Pegging up the rail.' : 'Under par — pegging backwards.';
+  $('ds-sub').textContent= net>=0 ? 'Pegging up the rail.' : 'Under par. pegging backwards.';
   renderGame();
   $('d-score').showModal();
 }
@@ -294,23 +294,32 @@ const FRIEND_ALPHA='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const makeFriendCode=()=>Array.from({length:6},()=>FRIEND_ALPHA[Math.floor(Math.random()*FRIEND_ALPHA.length)]).join('');
 
 function ensureAuthWatcher(){
-  if(S.authWatched) return;
+  if(S.authWatched || typeof firebase==='undefined' || !firebase.auth) return;
   S.authWatched=true;
   firebase.auth().onAuthStateChanged(onAuth);
 }
 async function signInGoogle(){
-  try{ await loadFirebase(); ensureAuthWatcher();
+  try{
+    await loadFirebase();
+    await loadFirebaseAuth(); // the auth SDK is only needed for Google
+    ensureAuthWatcher();
     await firebase.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider());
   }catch(e){ authError(e.message); }
 }
+/** Guest: a plain local session. No auth provider, no password, nothing stored. */
 async function signInGuest(){
-  try{ await loadFirebase(); ensureAuthWatcher();
+  try{
+    await loadFirebase();
     S.pendingName=($('auth-name')&&$('auth-name').value.trim())||'';
-    await firebase.auth().signInAnonymously();
+    const uid='g'+Math.random().toString(36).slice(2,10)+Date.now().toString(36);
+    await establishUser({uid, isAnonymous:true, displayName:null});
   }catch(e){ authError(e.message); }
 }
 function doSignOut(){
-  try{ if(S.uid) fdb.ref('users/'+S.uid+'/online').set(false).catch(()=>{}); firebase.auth().signOut(); }catch(e){}
+  try{
+    if(S.uid) fdb.ref('users/'+S.uid+'/online').set(false).catch(()=>{});
+    if(S.profile && S.profile.provider==='google' && firebase.auth) firebase.auth().signOut();
+  }catch(e){}
   S.uid=null; S.profile=null; S.myName=''; S.friends={}; S.challenges={};
   for(const u in S.friendWatches){ S.friendWatches[u](); }
   S.friendWatches={}; S.friendInfo={};
@@ -320,7 +329,14 @@ function doSignOut(){
 function authError(msg){ const e=$('auth-err'); if(e){ e.textContent=msg; e.classList.remove('hidden'); } }
 
 async function onAuth(user){
-  if(!user){ S.uid=null; S.profile=null; renderAccount(); return; }
+  // Google auth state changes only. Never clobber an active guest session.
+  if(!user){
+    if(S.profile && S.profile.provider==='guest') return;
+    S.uid=null; S.profile=null; renderAccount(); return;
+  }
+  await establishUser(user);
+}
+async function establishUser(user){
   S.uid=user.uid;
   try{
     const snap=await fdb.ref('users/'+user.uid).get();
@@ -432,7 +448,7 @@ function renderFriends(){
   const box=$('o-friends-list'); if(!box) return;
   const mine=$('my-friend-code'); if(mine&&S.profile) mine.textContent=S.profile.friendCode;
   const fuids=Object.keys(S.friends||{});
-  if(fuids.length===0){ box.innerHTML='<div class="pub-empty">No friends yet — swap codes to add one.</div>'; return; }
+  if(fuids.length===0){ box.innerHTML='<div class="pub-empty">No friends yet. swap codes to add one.</div>'; return; }
   box.innerHTML=fuids.map((fuid)=>{
     const info=S.friendInfo[fuid]||{name:(S.friends[fuid]||{}).name||'Player',online:false};
     return `<div class="pub-item"><div class="who"><span class="dot ${info.online?'on':'offl'}"></span>${esc(info.name)}
@@ -511,7 +527,7 @@ async function openProfile(uid){
   const isFriend=!self && S.friends && uid in S.friends;
   $('dp-name').textContent=prof.name||'Player';
   $('dp-sub').textContent= self
-    ? `your friend code: ${prof.friendCode||'—'}`
+    ? `your friend code: ${prof.friendCode||'-'}`
     : (prof.online?'online now':'offline');
   $('dp-stats').innerHTML=grid;
   $('dp-extra').innerHTML= self
@@ -552,7 +568,7 @@ function renderAccount(){
 }
 
 /* ====================================================================
-   ONLINE TABLE — 2–4 players, AI seat-fillers, live spectating, rejoin
+   ONLINE TABLE. 2–4 players, AI seat-fillers, live spectating, rejoin
    --------------------------------------------------------------------
    rooms/{code}: size, players{p0..p3:{name,joined,ai?,difficulty?,connected}},
                  status, currentRound, turn, totals{t0..}, rounds{i:{net0..}},
@@ -560,7 +576,7 @@ function renderAccount(){
    publicRooms/{code}: {host,createdAt,size}
    - Everyone plays each round in seat order with their own fresh shuffle.
    - AI seats are played by the HOST's client (so the host must be online
-     for AI turns — the table simply waits otherwise).
+     for AI turns. the table simply waits otherwise).
    - Presence: each client flags connected/disconnected via onDisconnect;
      a dropped player's seat is shown as held open until they rejoin with
      the same name. The live move log restores their half-played round.
@@ -578,13 +594,13 @@ async function openOnline(){
   renderAccount();
   try{
     await loadFirebase();
-    ensureAuthWatcher();
+    try{ await loadFirebaseAuth(); ensureAuthWatcher(); }catch(e){}
     if (!S.pubUnwatch){
       const ref=fdb.ref('publicRooms');
       const cb=ref.on('value',(snap)=>{ S.publicRooms=snap.exists()?snap.val():{}; renderPublicRooms(); });
       S.pubUnwatch=()=>ref.off('value',cb);
     }
-  }catch(e){ $('o-public').innerHTML=`<div class="pub-empty">Couldn't reach the lobby — check your connection.</div>`; }
+  }catch(e){ $('o-public').innerHTML=`<div class="pub-empty">Couldn't reach the lobby. check your connection.</div>`; }
 }
 function renderSeatConfig(){
   const box=$('o-seats'); if(!box) return;
@@ -608,7 +624,7 @@ function renderPublicRooms(){
   const entries=Object.entries(S.publicRooms||{})
     .filter(([,v])=>v && now-(v.createdAt||0) < 24*60*60*1000)
     .sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0));
-  if (entries.length===0){ box.innerHTML='<div class="pub-empty">No open tables right now — open one above.</div>'; return; }
+  if (entries.length===0){ box.innerHTML='<div class="pub-empty">No open tables right now. open one above.</div>'; return; }
   box.innerHTML=entries.map(([code,v])=>{
     const mins=Math.max(0,Math.round((now-(v.createdAt||0))/60000));
     const playing=v.status==='playing';
@@ -663,7 +679,7 @@ async function joinByCode(code){
     const snap=await db.ref('rooms/'+code).get();
     if(!snap.exists()){
       db.ref('publicRooms/'+code).remove().catch(()=>{});
-      return oError('Room not found — check the code.');
+      return oError('Room not found. check the code.');
     }
     const room=snap.val();
     const size=room.size||2;
@@ -767,7 +783,7 @@ function rosterHTML(room){
         ? `<button class="btn btn-ghost claim" data-claim="${k}">take seat</button>`
         : `<span class="held">seat held${heldFor>0?' '+heldFor+'s':''}</span>`) : ''}</span>`;
   }
-  if(S.seat===-1) out+=`<span class="chip"><span class="dot" style="background:#9a8f7a"></span>You — spectating</span>`;
+  if(S.seat===-1) out+=`<span class="chip"><span class="dot" style="background:#9a8f7a"></span>You. spectating</span>`;
   return out;
 }
 function bindClaims(container){
@@ -888,7 +904,7 @@ function historyHTML(room){
     const e=rounds[k]||{};
     const parts=[];
     for(let s=0;s<size;s++) parts.push(`<b>${esc(seatName(room,s))}</b> ${fmt(e['net'+s])}`);
-    return `R${k+1} — `+parts.join(' · ');
+    return `R${k+1}: `+parts.join(' · ');
   }).join('<br>');
 }
 
@@ -929,7 +945,7 @@ function renderOnline(){
     const rowScores=r.complete && !counting ? E.scoreRound(r).rowScores : null;
     const head = r.complete
       ? `<div class="draw"><div><div class="label">Starter</div><div class="sub">${counting?'counting the hands…':'Counts in all five hands.'}</div></div>${cardHTML(r.starter,'lg',false,true, counting&&S.count.set.has(4))}</div>`
-      : `<div class="draw"><div><div class="label">Your card</div><div class="sub">Tap a hand or press 1–4 — the table is watching.</div></div>${cardHTML(r.current,'lg',false,true)}</div>`;
+      : `<div class="draw"><div><div class="label">Your card</div><div class="sub">Tap a hand or press 1–4. the table is watching.</div></div>${cardHTML(r.current,'lg',false,true)}</div>`;
     const callout = counting ? calloutHTML('o', S.count) : '';
     const submit = r.complete && !counting
       ? `<button class="btn btn-primary" id="o-submit" style="width:100%;margin-top:6px">Submit ${E.scoreRound(r).net>=0?'+':''}${E.scoreRound(r).net}</button>` : '';
@@ -971,7 +987,7 @@ function renderOnline(){
     const head=lr.complete
       ? `<div class="draw"><div><div class="label">${esc(liveName)}'s starter</div><div class="sub">Counting up their five hands…</div></div>${cardHTML(lr.starter,'lg',false,true)}</div>`
       : liveOff
-        ? `<div class="draw"><div><div class="label">${esc(liveName)} disconnected<span class="live-badge" style="background:var(--brass-dim)">SEAT HELD</span></div><div class="sub">Board frozen — they can rejoin with the same name and code.</div></div>${cardHTML(lr.current,'lg',false,true)}</div>`
+        ? `<div class="draw"><div><div class="label">${esc(liveName)} disconnected<span class="live-badge" style="background:var(--brass-dim)">SEAT HELD</span></div><div class="sub">Board frozen. They can rejoin with the same name and code.</div></div>${cardHTML(lr.current,'lg',false,true)}</div>`
         : `<div class="draw"><div><div class="label">${esc(liveName)} is placing<span class="live-badge">LIVE</span></div><div class="sub">Every move shows as they make it.</div></div>${cardHTML(lr.current,'lg',false,true)}</div>`;
     $('o-spectate').innerHTML=head+rowsHTML(lr,()=>false,rowScores);
     $('o-waiting').classList.add('hidden');
@@ -980,7 +996,7 @@ function renderOnline(){
     $('o-waiting').classList.remove('hidden');
     const off=turnPlayer && !turnPlayer.ai && turnPlayer.connected===false;
     $('o-waiting-text').textContent= off
-      ? `${turnName} is disconnected — their seat is held while the table waits.`
+      ? `${turnName} is disconnected. Their seat is held while the table waits.`
       : `${turnName} is playing their round…`;
   }
 }
