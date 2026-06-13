@@ -13,7 +13,7 @@ const S = {
   players:[{name:'You',kind:'human'},{name:'Navigator',kind:'ai'}],
   match:null, round:null, lastResult:null, aiTimer:null,
   count:null, oCounted:-1,
-  campaign:{level:1, stars:{}, lives:5, lastLifeAt:Date.now()}, challenge:null, pendingLevel:null, lastClearedLevel:null, mapTick:null,
+  campaign:{level:1, stars:{}, lives:5, lastLifeAt:Date.now()}, challenge:null, activeSnap:null, cqDeal:null, sound:true, reduceMotion:false, pendingLevel:null, lastClearedLevel:null, mapTick:null,
   // online
   code:null, seat:0, room:null, myName:'', visibility:'public',
   roomSize:2, seatConfig:['open'], aiJob:'', aiTimerOnline:null, rosterTick:null,
@@ -201,13 +201,15 @@ const BANNERS = [
   { id: 'lantern',  name: 'Lantern glow',css: 'linear-gradient(100deg,#C9A227,#B5402F)',          need: (l,s) => l >= 12,                   needText: 'player level 12' },
   { id: 'bamboo',   name: 'Bamboo grove',css: 'linear-gradient(100deg,#3E8E7E,#8A6F1F)',          need: (l,s) => s >= 10,                   needText: '10 Conquest stars' },
   { id: 'cloud',    name: 'Gold cloud',  css: 'linear-gradient(100deg,#C9A227,#7A86B8)',          need: (l,s) => s >= 30,                   needText: '30 Conquest stars' },
-  { id: 'dragon',   name: 'Dragon',      css: 'linear-gradient(100deg,#B5402F,#C9A227,#3E8E7E)',  need: (l,s,c) => c >= 24,                 needText: 'clear all 24 levels' },
+  { id: 'cloud2',   name: 'Twin clouds', css: 'linear-gradient(100deg,#7A86B8,#3E8E7E)',          need: (l,s) => s >= 60,                   needText: '60 Conquest stars' },
+  { id: 'dragon',   name: 'Dragon',      css: 'linear-gradient(100deg,#B5402F,#C9A227,#3E8E7E)',  need: (l,s) => s >= 120,                  needText: '120 Conquest stars' },
+  { id: 'phoenix',  name: 'Phoenix',     css: 'linear-gradient(100deg,#C9A227,#B5402F,#C9A227)',  need: (l,s) => s >= 200,                  needText: '200 Conquest stars' },
 ];
 const totalStars = (camp) => Object.values((camp || S.campaign).stars || {}).reduce((n, v) => n + v, 0);
 const clearedCount = (camp) => Object.keys((camp || S.campaign).stars || {}).length;
 function bannerUnlocked(b, prof, camp) {
   const lvl = levelFromXp((prof || S.profile || {}).xp).level;
-  return b.need(lvl, totalStars(camp), clearedCount(camp));
+  return b.need(lvl, totalStars(camp));
 }
 function bannerById(id) { return BANNERS.find((b) => b.id === id) || BANNERS[0]; }
 function pushLeaderboard() {
@@ -225,32 +227,59 @@ function pushLeaderboard() {
 const MAX_LIVES = 5;
 const LIFE_MS = () => (typeof window.__lifeMs === 'number' ? window.__lifeMs : 30 * 60 * 1000);
 
-const LEVELS = [
-  { id: 1,  type: 'solo',      rounds: 8, name: 'First steps',        desc: 'Reach 29 within 8 rounds.' },
-  { id: 2,  type: 'solo',      rounds: 6, name: 'Finding the fives',  desc: 'Reach 29 within 6 rounds.' },
-  { id: 3,  type: 'bestRound', score: 35, rounds: 5, name: 'One good deal', desc: 'Score 35 or more in a single round. 5 rounds to do it.' },
-  { id: 4,  type: 'ai', difficulty: 'easy',   handicap: 0,  name: 'The Deckhand',   desc: 'Beat the Deckhand in a race to 29.' },
-  { id: 5,  type: 'solo',      rounds: 5, name: 'Tighter now',        desc: 'Reach 29 within 5 rounds.' },
-  { id: 6,  type: 'ai', difficulty: 'easy',   handicap: 5,  name: 'Head start',     desc: 'The Deckhand starts 5 up the rail. Beat them anyway.' },
-  { id: 7,  type: 'bestRound', score: 40, rounds: 5, name: 'Forty or nothing', desc: 'Score 40 or more in a single round. 5 rounds to do it.' },
-  { id: 8,  type: 'ai', difficulty: 'medium', handicap: 0,  name: 'The Navigator',  desc: 'Beat the Navigator in a race to 29.' },
-  { id: 9,  type: 'solo',      rounds: 4, name: 'Four rounds flat',   desc: 'Reach 29 within 4 rounds.' },
-  { id: 10, type: 'ai', difficulty: 'medium', handicap: 5,  name: 'Uphill water',   desc: 'The Navigator starts 5 up. Beat them anyway.' },
-  { id: 11, type: 'bestRound', score: 45, rounds: 5, name: 'High tide',     desc: 'Score 45 or more in a single round. 5 rounds to do it.' },
-  { id: 12, type: 'ai', difficulty: 'medium', handicap: 10, name: 'Ten behind',     desc: 'The Navigator starts 10 up. Beat them anyway.' },
-  { id: 13, type: 'solo',      rounds: 3, name: 'Three to shore',     desc: 'Reach 29 within 3 rounds.' },
-  { id: 14, type: 'ai', difficulty: 'hard',   handicap: 0,  name: 'The Captain',    desc: 'Beat the Captain in a race to 29.' },
-  { id: 15, type: 'bestRound', score: 50, rounds: 6, name: 'Half a hundred', desc: 'Score 50 or more in a single round. 6 rounds to do it.' },
-  { id: 16, type: 'ai', difficulty: 'hard',   handicap: 5,  name: 'Rough seas',     desc: 'The Captain starts 5 up. Beat them anyway.' },
-  { id: 17, type: 'solo',      rounds: 3, name: 'No slack',           desc: 'Reach 29 within 3 rounds. Again, but you know more now.' },
-  { id: 18, type: 'ai', difficulty: 'hard',   handicap: 10, name: 'Taking on water', desc: 'The Captain starts 10 up. Beat them anyway.' },
-  { id: 19, type: 'bestRound', score: 55, rounds: 6, name: 'Stacked deck',   desc: 'Score 55 or more in a single round. 6 rounds to do it.' },
-  { id: 20, type: 'ai', difficulty: 'hard',   handicap: 15, name: 'Fifteen down',   desc: 'The Captain starts 15 up. Beat them anyway.' },
-  { id: 21, type: 'solo',      rounds: 2, name: 'Two perfect rounds', desc: 'Reach 29 within 2 rounds. Average 44 a round. Good luck.' },
-  { id: 22, type: 'ai', difficulty: 'hard',   handicap: 20, name: 'Twenty down',    desc: 'The Captain starts 20 up. Beat them anyway.' },
-  { id: 23, type: 'bestRound', score: 60, rounds: 8, name: 'The legend hand', desc: 'Score 60 or more in a single round. 8 rounds to chase it.' },
-  { id: 24, type: 'ai', difficulty: 'hard',   handicap: 25, name: "The Captain's table", desc: 'The Captain starts 25 up the rail. Take the table anyway.' },
-];
+/* 100 Conquest levels, generated so the catalogue can grow without code
+   churn. Types:
+     solo      reach `target` total within `rounds` rounds
+     bestRound score `score` or more in a single round, within `rounds`
+     ai        beat `ais` opponents (each {difficulty,handicap}) racing to `target`
+   Star rules (set in evaluation): solo/bestRound by rounds to spare,
+   ai by rounds taken. */
+const AI_TIERS = { easy:'Deckhand', medium:'Navigator', hard:'Captain' };
+
+function genLevels(){
+  const out=[];
+  const soloNames=['First steps','Finding the fives','Tighter now','Four to shore','Three to shore','No slack',
+    'Quick current','Steady hands','The short race','Down to the wire','Cutting it close','Sprint','Low tide','Riptide'];
+  const bestNames=['One good deal','Forty or nothing','High tide','Half a hundred','Stacked deck','The legend hand',
+    'Perfect storm','Golden hand','Treasure deal','Royal flush dreams','The big one','Jackpot','Master stroke'];
+  const aiNames=['The Deckhand','Head start','The Navigator','Uphill water','Ten behind','The Captain','Rough seas',
+    'Taking on water','Fifteen down','Twenty down','Two on one','The gauntlet','Triple threat','The admiralty',
+    "The Captain's table",'Storm of three','The whole crew','Final reckoning'];
+  let si=0,bi=0,ai=0;
+  for(let id=1; id<=100; id++){
+    const tier = id<=10?0 : id<=25?1 : id<=45?2 : id<=70?3 : 4; // ramps difficulty
+    const cyc = id % 5;
+    if (cyc===1 || cyc===3){
+      // solo: target rises with tier, rounds tighten
+      const target = [29,29,40,45,50][tier];
+      const rounds = Math.max(2, [7,6,6,5,5][tier] - Math.floor((id-1)/20));
+      out.push({ id, type:'solo', target, rounds,
+        name: soloNames[si++ % soloNames.length],
+        desc: `Reach ${target} total within ${rounds} rounds.` });
+    } else if (cyc===0){
+      // bestRound: score climbs
+      const score = [33,38,44,52,60][tier] + Math.floor((id-1)/25)*4;
+      const rounds = [5,5,5,6,6][tier];
+      out.push({ id, type:'bestRound', score, rounds,
+        name: bestNames[bi++ % bestNames.length],
+        desc: `Score ${score}+ in a single round. ${rounds} rounds to do it.` });
+    } else {
+      // ai: 1 opponent early, 2 from tier 2, 3 from tier 4; handicaps grow
+      const diff = ['easy','easy','medium','hard','hard'][tier];
+      const nOpp = tier>=4 ? 3 : tier>=2 ? (id%2?2:1) : 1;
+      const baseH = [0,5,5,10,12][tier] + Math.floor((id-1)/15)*2;
+      const target = tier>=3 ? 35 : 29;
+      const ais=[];
+      for(let o=0;o<nOpp;o++) ais.push({ difficulty:diff, handicap: baseH + o*3 });
+      const oppLabel = nOpp===1?`the ${AI_TIERS[diff]}`:`${nOpp} ${AI_TIERS[diff]}s`;
+      out.push({ id, type:'ai', target, ais,
+        name: aiNames[ai++ % aiNames.length] + (id>18?` ${Math.ceil(id/18)}`:''),
+        desc: `Race to ${target}. Beat ${oppLabel}` + (baseH?` (they start +${baseH}+)`:'') + '.' });
+    }
+  }
+  return out;
+}
+const LEVELS = genLevels();
 
 function blankCampaign(){
   return { level: 1, stars: {}, lives: MAX_LIVES, lastLifeAt: Date.now() };
@@ -280,6 +309,44 @@ function nextLifeIn(){
   if (c.lives >= MAX_LIVES) return 0;
   return Math.max(0, LIFE_MS() - (Date.now() - c.lastLifeAt));
 }
+/* Persist the in-progress level so closing the tab loses neither the
+   level nor the life. Only the human seat's deal needs replaying; an AI
+   seat mid-round simply restarts its own deal on resume (it's the AI's
+   round, not yours, so no progress of yours is lost). */
+function saveChallengeSnapshot(){
+  if (!S.uid || !fdb || !S.challenge) return;
+  const lv=S.challenge.level;
+  let snap;
+  if (S.mode==='conquest'){
+    const humanTurn = S.match.turn===0;
+    snap={ id:lv.id, mode:'conquest',
+      totals:S.cq.totals.slice(), roundsPlayed:S.match.roundsPlayed.slice(),
+      rounds:S.cq.rounds, turn:S.match.turn,
+      seed: humanTurn ? S.cqDeal.seed : 0,
+      moves: humanTurn ? S.cqDeal.moves.slice() : [] };
+  } else {
+    snap={ id:lv.id, mode:'solo',
+      total:S.match.totals[0], roundsUsed:S.challenge.roundsUsed,
+      seed:S.cqDeal.seed, moves:S.cqDeal.moves.slice() };
+  }
+  S.activeSnap=snap;
+  fdb.ref('users/'+S.uid+'/active').set(snap).catch(()=>{});
+}
+function clearChallengeSnapshot(){
+  if (S.uid && fdb) fdb.ref('users/'+S.uid+'/active').remove().catch(()=>{});
+}
+function resumeChallenge(snap){
+  const lv=LEVELS.find((x)=>x.id===snap.id); if(!lv) { clearChallengeSnapshot(); return; }
+  S.pendingLevel=lv;
+  S.challenge={ level:lv, roundsUsed:0, target:lv.target||E.TARGET };
+  if (snap.mode==='conquest'){
+    startConquestAiMatch(lv, { totals:snap.totals, roundsPlayed:snap.roundsPlayed,
+      rounds:snap.rounds, turn:snap.turn, seed:snap.seed||E.randomSeed(), moves:snap.moves||[] });
+  } else {
+    startSoloChallenge(lv, { total:snap.total, roundsUsed:snap.roundsUsed, seed:snap.seed, moves:snap.moves||[] });
+  }
+}
+
 function saveCampaign(){
   if (S.uid && fdb) fdb.ref('users/' + S.uid + '/campaign').set(S.campaign).catch(() => {});
   pushLeaderboard();
@@ -294,46 +361,63 @@ function mergeCampaign(stored){
 }
 
 /* ---------- the map ---------- */
-const NODE_X = [18, 50, 82, 50];
+const NODE_X = [20, 38, 62, 80, 62, 38];
+const NODE_TYPE_ICON = { solo:'🎯', bestRound:'💎', ai:'⚔' };
 function renderMap(){
   refreshLives();
   const c = S.campaign;
   const wrap = $('map-path'); if (!wrap) return;
-  const H = LEVELS.length * 84 + 80;
+  const GAP = 92;
+  const H = LEVELS.length * GAP + 120;
   wrap.style.height = H + 'px';
-  const pts = LEVELS.map((lv, i) => ({ x: NODE_X[i % NODE_X.length], y: 40 + i * 84 }));
-  const svgPts = pts.map((p) => `${p.x},${(p.y / H) * 100}`).join(' ');
-  let html = `<svg id="map-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
-    <polyline points="${svgPts}" fill="none" stroke="var(--brass-dim)" stroke-width="1.1"
-      stroke-dasharray="2.4 2.2" vector-effect="non-scaling-stroke" opacity="0.85"/></svg>`;
+  const pts = LEVELS.map((lv, i) => ({ x: NODE_X[i % NODE_X.length], y: 70 + i * GAP }));
+  // smooth gold trail through all nodes
+  const path = pts.map((p,i)=>`${i?'L':'M'}${p.x},${(p.y/H)*1000}`).join(' ');
+  const doneY = (() => { // glow the trail up to the furthest unlocked node
+    const idx = Math.min(c.level, LEVELS.length) - 1;
+    return ((pts[idx]?pts[idx].y:70)/H)*1000;
+  })();
+  let html = `<svg id="map-svg" viewBox="0 0 100 1000" preserveAspectRatio="none">
+    <path d="${path}" fill="none" stroke="#1F100E" stroke-width="6" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+    <path d="${path}" fill="none" stroke="var(--brass-dim)" stroke-width="3" stroke-dasharray="5 5" vector-effect="non-scaling-stroke" opacity=".7"/>
+    <path d="${path}" fill="none" stroke="var(--brass)" stroke-width="3" stroke-linecap="round" vector-effect="non-scaling-stroke"
+      style="stroke-dasharray:1000;stroke-dashoffset:${1000-(doneY/1000)*1000};opacity:.9"/></svg>`;
   html += LEVELS.map((lv, i) => {
     const p = pts[i];
     const stars = c.stars[lv.id] || 0;
     const unlocked = lv.id <= c.level;
     const done = stars > 0;
-    return `<button class="map-node ${unlocked ? (done ? 'done' : 'open') : 'locked'}"
-        style="left:${p.x}%;top:${p.y}px" data-level="${lv.id}" ${unlocked ? '' : 'disabled'}
-        aria-label="Level ${lv.id}: ${lv.name}">
-      <span class="num">${unlocked ? lv.id : '🔒'}</span>
-      <span class="stars">${done ? '★'.repeat(stars) + '☆'.repeat(3 - stars) : ''}</span>
+    const isNext = lv.id === c.level && !done;
+    const cls = unlocked ? (done ? 'done' : (isNext?'open next':'open')) : 'locked';
+    return `<button class="map-node ${cls}" style="left:${p.x}%;top:${p.y}px"
+        data-level="${lv.id}" ${unlocked ? '' : 'disabled'} aria-label="Level ${lv.id}: ${lv.name}">
+      ${isNext?'<span class="ping"></span>':''}
+      <span class="ic">${unlocked ? (done?NODE_TYPE_ICON[lv.type]:lv.id) : '🔒'}</span>
+      ${done?`<span class="stars">${'★'.repeat(stars)}<span class="se">${'★'.repeat(3-stars)}</span></span>`:''}
+      ${unlocked&&!done?`<span class="lnum">${lv.id}</span>`:''}
     </button>`;
   }).join('');
   wrap.innerHTML = html;
   for (const b of wrap.querySelectorAll('.map-node:not([disabled])'))
     b.addEventListener('click', () => openLevel(+b.dataset.level));
+  // scroll the next level into view
+  const nextNode = wrap.querySelector('.map-node.next') || wrap.querySelector('.map-node.open');
+  if (nextNode && !S.mapScrolled){ S.mapScrolled=true;
+    setTimeout(()=>{ try{ nextNode.scrollIntoView({block:'center',behavior:'smooth'}); }catch(e){} },120); }
   renderLivesBar();
 }
 function renderLivesBar(){
   refreshLives();
   const c = S.campaign;
   const hearts = $('map-lives');
-  if (hearts) hearts.innerHTML = '❤'.repeat(c.lives) + '<span class="dimheart">' + '♡'.repeat(MAX_LIVES - c.lives) + '</span>';
+  if (hearts) hearts.innerHTML = '<span class="hful">'+'❤'.repeat(c.lives)+'</span><span class="dimheart">' + '♡'.repeat(MAX_LIVES - c.lives) + '</span>';
   const t = $('map-timer');
   if (t) {
     const ms = nextLifeIn();
     t.textContent = c.lives >= MAX_LIVES ? 'hearts full'
-      : 'next life in ' + Math.floor(ms / 60000) + ':' + String(Math.ceil((ms % 60000) / 1000)).padStart(2, '0');
+      : '+1 ❤ in ' + Math.floor(ms / 60000) + ':' + String(Math.ceil((ms % 60000) / 1000)).padStart(2, '0');
   }
+  const sb = $('map-starcount'); if (sb) sb.textContent = totalStars() + ' ★';
 }
 function startMapTick(){
   if (S.mapTick) clearInterval(S.mapTick);
@@ -345,12 +429,14 @@ function startMapTick(){
   }, 1000);
 }
 /** Conquest is an online, account-bound mode. Guests are asked to sign in with Google. */
+/** Conquest is an online, account-bound mode. Guests are asked to sign in with Google. */
 function openMap(){
   if (!S.uid || !S.profile || S.profile.provider === 'guest'){
     show('online'); oShow(S.uid ? 'lobby' : 'auth');
     return;
   }
   show('map');
+  S.mapScrolled=false;
   renderMap();
   startMapTick();
 }
@@ -363,10 +449,15 @@ function renderConquestPanel(){
   }
   refreshLives();
   const c=S.campaign;
-  box.innerHTML=`<div class="pub-item"><div class="who">Level ${c.level} of ${LEVELS.length}
+  const snap=S.activeSnap;
+  const resumeRow = snap ? `<div class="pub-item" style="border-color:var(--brass)">
+      <div class="who">Resume level ${snap.id}<span class="age">a game is in progress</span></div>
+      <button class="btn btn-primary" id="go-resume">Resume</button></div>` : '';
+  box.innerHTML=resumeRow+`<div class="pub-item"><div class="who">Level ${c.level}
       <span class="age">${totalStars()} ★ · ${'❤'.repeat(c.lives)}${'♡'.repeat(MAX_LIVES-c.lives)}</span></div>
-    <button class="btn btn-primary" id="go-conquest">Play</button></div>`;
+    <button class="btn ${snap?'btn-ghost':'btn-primary'}" id="go-conquest">${snap?'Map':'Play'}</button></div>`;
   $('go-conquest').addEventListener('click',openMap);
+  const rb=$('go-resume'); if(rb) rb.addEventListener('click',()=>{ const sn=S.activeSnap; S.activeSnap=null; resumeChallenge(sn); });
 }
 function renderLobbyGates(){
   const guest = S.profile && S.profile.provider==='guest';
@@ -393,28 +484,74 @@ function startLevel(){
   refreshLives();
   if (S.campaign.lives <= 0) return;
   $('d-level').close();
-  S.challenge = { level: lv, roundsUsed: 0 };
+  S.challenge = { level: lv, roundsUsed: 0, target: lv.target || E.TARGET };
   if (lv.type === 'ai') {
-    S.difficulty = lv.difficulty;
-    startMatch('ai');
-    S.players[1].name = lv.name.startsWith('The') ? lv.name.replace('The ', '') : AI_NAMES[lv.difficulty];
-    S.match.totals[1] = lv.handicap || 0;
-    renderGame();
+    startConquestAiMatch(lv);
   } else {
-    startMatch('solo');
+    startSoloChallenge(lv, null);
   }
+}
+function startSoloChallenge(lv, restore){
+  cancelCount(); clearInterval(S.aiTimer);
+  S.mode='solo';
+  S.players=[{name:'You',kind:'human'},{name:'-',kind:'human'}];
+  if (restore){
+    S.match={ totals:[restore.total,0], roundsPlayed:[restore.roundsUsed,0], turn:0, outcome:{kind:'playing'} };
+    S.challenge.roundsUsed=restore.roundsUsed;
+    S.cqDeal={ seed:restore.seed, moves:(restore.moves||[]).slice() };
+    let r=E.newRound(restore.seed);
+    for (const m of S.cqDeal.moves) r=E.placeCard(r,m);
+    S.round=r;
+  } else {
+    S.match=E.newMatch(0);
+    S.cqDeal={ seed:E.randomSeed(), moves:[] };
+    S.round=E.newRound(S.cqDeal.seed);
+  }
+  show('game'); renderGame();
+  saveChallengeSnapshot();
+}
+
+/* Multi-opponent Conquest match. You are seat 0; opponents are AI seats
+   1..n played locally. Everyone takes a full round per "turn cycle".
+   First to the target after equal rounds wins; you must be strictly top. */
+function startConquestAiMatch(lv, restore){
+  cancelCount(); clearInterval(S.aiTimer);
+  const ais = lv.ais || [{difficulty:'medium',handicap:0}];
+  const names = ais.map((a,i)=> ais.length>1 ? `${AI_TIERS[a.difficulty]} ${i+1}` : AI_TIERS[a.difficulty]);
+  S.mode='conquest';
+  S.players=[{name:'You',kind:'human'}, ...names.map((n)=>({name:n,kind:'ai'}))];
+  if (restore){
+    S.cq={ ais, target: lv.target||E.TARGET, totals:restore.totals.slice(), rounds:restore.rounds, turn:restore.turn, n:ais.length+1 };
+    S.match={ totals:S.cq.totals, roundsPlayed:restore.roundsPlayed.slice(), turn:restore.turn, outcome:{kind:'playing'} };
+    beginConquestRound(restore.turn, restore.seed, restore.moves);
+  } else {
+    S.cq={ ais, target: lv.target||E.TARGET, totals:[0,...ais.map((a)=>a.handicap||0)], rounds:0, turn:0, n:ais.length+1 };
+    S.match={ totals:S.cq.totals, roundsPlayed:S.cq.totals.map(()=>0), turn:0, outcome:{kind:'playing'} };
+    beginConquestRound(0, E.randomSeed(), []);
+  }
+  show('game'); renderGame();
+  if (S.players[S.match.turn].kind==='ai') runConquestAiRound(S.match.turn);
+}
+/* Open a round for `seat`, replaying any prior placements (for resume). */
+function beginConquestRound(seat, seed, moves){
+  S.cqDeal={ seed, moves: (moves||[]).slice() };
+  let r=E.newRound(seed);
+  for (const m of S.cqDeal.moves) r=E.placeCard(r,m);
+  S.round=r;
+  saveChallengeSnapshot();
 }
 
 /* ---------- evaluation ---------- */
-function challengeStarsSolo(lv, roundsUsed){
-  return Math.max(1, Math.min(3, 1 + (lv.rounds - roundsUsed)));
+// Solo & bestRound: 3 stars if you beat the deadline by 2+ rounds,
+// 2 stars with 1 round to spare, 1 star on the final allowed round.
+function challengeStarsByRounds(lv, roundsUsed){
+  const spare = lv.rounds - roundsUsed; // 0 = used the final round
+  return spare >= 2 ? 3 : spare === 1 ? 2 : 1;
 }
-function challengeStarsBest(lv, handTotal){
-  return Math.max(1, Math.min(3, 1 + Math.floor((handTotal - lv.score) / 5)));
-}
-function challengeStarsAi(m, seat){
-  const margin = m.totals[seat] - m.totals[1 - seat];
-  return margin >= 20 ? 3 : margin >= 10 ? 2 : 1;
+// AI duels: by how many rounds it took. 1-3 rounds = 3 stars,
+// 4-5 = 2 stars, 6+ = 1 star.
+function challengeStarsByPace(roundsUsed){
+  return roundsUsed <= 3 ? 3 : roundsUsed <= 5 ? 2 : 1;
 }
 /** Called from nextRound (solo modes) after totals update. True = handled. */
 function challengeSoloStep(roundResult){
@@ -422,17 +559,18 @@ function challengeSoloStep(roundResult){
   const lv = ch.level;
   ch.roundsUsed += 1;
   if (lv.type === 'bestRound') {
-    if (roundResult.handTotal >= lv.score) { challengeWin(challengeStarsBest(lv, roundResult.handTotal)); return true; }
+    if (roundResult.handTotal >= lv.score) { challengeWin(challengeStarsByRounds(lv, ch.roundsUsed)); return true; }
     if (ch.roundsUsed >= lv.rounds) { challengeFail(); return true; }
     return false;
   }
-  // solo: reach 29 within N rounds
-  if (S.match.totals[0] >= E.TARGET) { challengeWin(challengeStarsSolo(lv, ch.roundsUsed)); return true; }
+  // solo: reach the level's target total within N rounds
+  if (S.match.totals[0] >= (lv.target || E.TARGET)) { challengeWin(challengeStarsByRounds(lv, ch.roundsUsed)); return true; }
   if (ch.roundsUsed >= lv.rounds) { challengeFail(); return true; }
   return false;
 }
 function challengeWin(stars){
   const ch = S.challenge; if (!ch) return;
+  clearChallengeSnapshot(); S.activeSnap=null;
   const lv = ch.level;
   const c = S.campaign;
   const firstClear = !(c.stars[lv.id] > 0);
@@ -444,7 +582,7 @@ function challengeWin(stars){
   $('dcr-eyebrow').textContent = 'Level ' + lv.id + ' cleared';
   $('dcr-title').textContent = lv.name;
   $('dcr-stars').textContent = '★'.repeat(stars) + '☆'.repeat(3 - stars);
-  $('dcr-sub').textContent = (lv.id < LEVELS.length ? 'The path continues.' : 'You have conquered the whole map. Remarkable.') + ` · +${xp} xp`;
+  $('dcr-sub').textContent = 'The path continues.' + ` · +${xp} xp`;
   $('dcr-retry').classList.add('hidden');
   $('dcr-next').classList.toggle('hidden', lv.id >= LEVELS.length);
   S.lastClearedLevel = lv.id;
@@ -452,6 +590,7 @@ function challengeWin(stars){
 }
 function challengeFail(){
   const ch = S.challenge; if (!ch) return;
+  clearChallengeSnapshot(); S.activeSnap=null;
   const lv = ch.level;
   loseLife();
   S.challenge = null; S.match = null; S.round = null; cancelCount(); clearInterval(S.aiTimer);
@@ -493,18 +632,19 @@ function renderGame(){
     const lv=S.challenge.level;
     const budget = lv.type==='ai' ? '' : ` / ${lv.rounds}`;
     $('g-round').textContent = `Level ${lv.id} · Round ${m.roundsPlayed[seat]+1}${budget}`;
+    const oppNames = S.players.slice(1).map((p)=>p.name).join(', ');
     $('g-goal').textContent = 'Goal: ' + (
-      lv.type==='solo' ? `reach 29 within ${lv.rounds} rounds`
+      lv.type==='solo' ? `reach ${lv.target||29} within ${lv.rounds} rounds`
       : lv.type==='bestRound' ? `score ${lv.score}+ in a single round`
-      : `beat ${S.players[1].name}` + (lv.handicap ? ` (they start +${lv.handicap})` : ''));
+      : `reach ${lv.target||29} and finish above ${oppNames}`);
     $('g-goal').classList.remove('hidden');
   } else {
     $('g-round').textContent = `Round ${m.roundsPlayed[seat]+1}`;
     $('g-goal').classList.add('hidden');
   }
-  const lanes = S.mode==='solo'
-    ? [{name:'You', total:m.totals[0]}]
-    : [{name:S.players[0].name,total:m.totals[0]},{name:S.players[1].name,total:m.totals[1]}];
+  let lanes;
+  if (S.mode==='solo') lanes=[{name:'You', total:m.totals[0]}];
+  else lanes=S.players.map((p,i)=>({name:p.name, total:m.totals[i]||0}));
   $('g-rail').innerHTML = railHTML(lanes, S.mode==='solo'?0:seat);
   if(!r){ $('g-rows').innerHTML=''; $('g-draw-card').innerHTML=''; $('g-callout').innerHTML=''; return; }
 
@@ -530,10 +670,10 @@ function renderGame(){
 function place(rowIndex){
   const r=S.round; if(!r||!E.canPlace(r,rowIndex)) return;
   S.round = E.placeCard(r,rowIndex);
+  if (S.challenge && S.cqDeal) { S.cqDeal.moves.push(rowIndex); saveChallengeSnapshot(); }
   renderGame();
   if (S.round.complete) startCount(S.round,'g',onRoundComplete);
 }
-
 function onRoundComplete(){
   const result=E.scoreRound(S.round);
   S.lastResult={result,seat:S.match.turn};
@@ -542,15 +682,17 @@ function onRoundComplete(){
   $('ds-hands').innerHTML=result.rowScores.map((sc,i)=>
     `<div class="ds-row"><span class="nm">${ROW_LABELS[i]}</span><span class="bd">${breakdownHTML(sc)}</span><b>${sc.total}</b></div>`).join('')
     + (result.heels ? `<div class="ds-row"><span class="nm">Starter</span><span class="bd">his heels, a Jack turned</span><b>2</b></div>` : '');
-  $('ds-eyebrow').textContent= S.mode==='solo' ? 'Round complete' : `${esc(S.players[S.match.turn].name)} · round complete`;
+  const seatName = S.mode==='solo' ? 'Round complete' : `${esc(S.players[S.match.turn].name)} · round complete`;
+  $('ds-eyebrow').textContent= seatName;
   $('ds-line').innerHTML=`${handTotal} <span class="dim">− 29 =</span> <span class="${net>=0?'pos':'neg'}">${net>=0?'+':''}${net}</span>`;
-  $('ds-sub').textContent= net>=0 ? 'Pegging up the rail.' : 'Under par. pegging backwards.';
+  $('ds-sub').textContent= net>=0 ? 'Pegging up the rail.' : 'Under par, pegging backwards.';
   renderGame();
   $('d-score').showModal();
 }
 
 function nextRound(){
   $('d-score').close();
+  if (S.mode==='conquest'){ conquestAdvance(); return; }
   if (S.mode==='solo'){
     const challengeRound=S.lastResult.result;
     S.match.totals[0]+=S.lastResult.result.net;
@@ -558,7 +700,9 @@ function nextRound(){
     S.lastResult=null;
     if (S.challenge){
       if (challengeSoloStep(challengeRound)) return;
-      S.round=E.newRound(E.randomSeed());
+      S.cqDeal={ seed:E.randomSeed(), moves:[] };
+      S.round=E.newRound(S.cqDeal.seed);
+      saveChallengeSnapshot();
       renderGame();
       return;
     }
@@ -597,13 +741,48 @@ function runAiRound(){
   },300);
 }
 
-function showMatchOver(m){
-  if (S.challenge && S.mode==='ai'){
-    const o=m.outcome;
-    if (o.kind==='win' && o.player===0) challengeWin(challengeStarsAi(m,0));
-    else challengeFail();
-    return;
+/* Conquest turn cycle: seat 0 (you), then each AI opponent, all play one
+   round per cycle. After the score sheet for the current seat, advance. */
+function conquestAdvance(){
+  const cq=S.cq, seat=S.match.turn;
+  cq.totals[seat]+=S.lastResult.result.net;
+  S.match.totals=cq.totals;
+  S.match.roundsPlayed[seat]+=1;
+  S.lastResult=null;
+  const nextSeat=(seat+1)%cq.n;
+  S.match.turn=nextSeat;
+  if (nextSeat===0){
+    // a full cycle done: everyone has played cq.rounds+1 rounds
+    cq.rounds+=1;
+    const me=cq.totals[0];
+    const top=Math.max(...cq.totals);
+    const anyHome=cq.totals.some((t)=>t>=cq.target);
+    if (anyHome){
+      if (me===top && cq.totals.filter((t)=>t===top).length===1){
+        challengeWin(challengeStarsByPace(cq.rounds));
+      } else {
+        challengeFail();
+      }
+      return;
+    }
   }
+  beginConquestRound(nextSeat, E.randomSeed(), []);
+  renderGame();
+  if (S.players[nextSeat].kind==='ai') runConquestAiRound(nextSeat);
+}
+function runConquestAiRound(seat){
+  clearInterval(S.aiTimer);
+  const diff=S.cq.ais[seat-1].difficulty;
+  S.aiTimer=setInterval(()=>{
+    const r=S.round;
+    if(!r||r.complete){ clearInterval(S.aiTimer); return; }
+    S.round=E.placeCard(r,E.aiChooseRow(r,diff));
+    renderGame();
+    if (S.round.complete){ clearInterval(S.aiTimer); startCount(S.round,'g',onRoundComplete); }
+  }, window.__fastCount?5:280);
+}
+
+function showMatchOver(m){
   const o=m.outcome;
   $('do-title').textContent= o.kind==='tie' ? "It's a tie" : `${S.players[o.player].name} wins`;
   $('do-sub').textContent=`${S.players[0].name} ${m.totals[0]} · ${S.players[1].name} ${m.totals[1]}`;
@@ -689,6 +868,7 @@ async function establishUser(user){
     }
     S.myName=S.profile.name;
     mergeCampaign(S.profile.campaign);
+    S.activeSnap = S.profile.active || null;
     saveCampaign();
     // user-level presence for the friends list
     const meRef=fdb.ref('users/'+S.uid);
@@ -729,7 +909,7 @@ function syncFriendWatches(){
 function bumpStats(mut){
   if(!S.uid||!S.profile) return;
   mut(S.profile.stats);
-  fdb.ref('users/'+S.uid+'/stats').set(S.profile.stats).catch(()=>{});
+  if(fdb) fdb.ref('users/'+S.uid+'/stats').set(S.profile.stats).catch(()=>{});
 }
 function recordHand(rowScores, handTotal){
   if(!S.uid) return;
@@ -753,10 +933,10 @@ function recordMatchEnd(room){
     if(rounds>(st.longestGame||0)) st.longestGame=rounds;
   });
   addXp(room.result==='tie' ? XP_AWARDS.matchTie : room.result==='p'+S.seat ? XP_AWARDS.matchWin : XP_AWARDS.matchLoss, 'match');
-  fdb.ref('users/'+S.uid+'/games/'+S.code).remove().catch(()=>{});
+  if(fdb) fdb.ref('users/'+S.uid+'/games/'+S.code).remove().catch(()=>{});
 }
 function trackGame(code){
-  if(S.uid) fdb.ref('users/'+S.uid+'/games/'+code).set({at:Date.now()}).catch(()=>{});
+  if(S.uid&&fdb) fdb.ref('users/'+S.uid+'/games/'+code).set({at:Date.now()}).catch(()=>{});
 }
 
 /* ---------- friends ---------- */
@@ -1462,6 +1642,33 @@ $('o-back').addEventListener('click',()=>show('home'));
 $('o-setup-back').addEventListener('click',()=>show('home'));
 $('o-cancel').addEventListener('click',leaveRoom);
 $('o-leave').addEventListener('click',leaveRoom);
+
+// ----- settings panel -----
+function openSettings(){
+  $('set-sound').setAttribute('aria-checked', String(S.sound!==false));
+  $('set-motion').setAttribute('aria-checked', String(!!S.reduceMotion));
+  $('set-fast').setAttribute('aria-checked', String(!!window.__fastCount));
+  const acc=$('set-account');
+  if (S.uid && S.profile){
+    acc.innerHTML=`<div class="set-row"><span>Signed in as <b>${esc(S.profile.name)}</b></span>
+      <button class="btn btn-ghost mini" id="set-signout">sign out</button></div>`;
+    $('set-signout').addEventListener('click',()=>{ $('d-settings').close(); doSignOut(); });
+  } else {
+    acc.innerHTML=`<div class="set-row"><span>Not signed in</span></div>`;
+  }
+  $('d-settings').showModal();
+}
+function toggleSetting(el, apply){
+  const on = el.getAttribute('aria-checked')!=='true';
+  el.setAttribute('aria-checked', String(on));
+  apply(on);
+}
+$('btn-settings').addEventListener('click',openSettings);
+$('set-close').addEventListener('click',()=>$('d-settings').close());
+$('set-rules').addEventListener('click',()=>{ $('d-settings').close(); $('d-rules').showModal(); });
+$('set-sound').addEventListener('click',function(){ toggleSetting(this,(on)=>{ S.sound=on; }); });
+$('set-motion').addEventListener('click',function(){ toggleSetting(this,(on)=>{ S.reduceMotion=on; document.body.classList.toggle('reduce-motion',on); }); });
+$('set-fast').addEventListener('click',function(){ toggleSetting(this,(on)=>{ window.__fastCount=on; }); });
 
 document.addEventListener('keydown',(e)=>{
   if(e.key<'1'||e.key>'4'||e.repeat) return;

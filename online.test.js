@@ -227,7 +227,7 @@ const playOut = async (win) => {
   await waitFor(() => $a('d-profile').open, 1500);
   check('profile: shows all 11 stat tiles incl Conquest', A.document.querySelectorAll('#dp-stats .stat').length === 11);
   check('profile: level chip and xp from the match win', $a('dp-level').textContent.startsWith('Lv') && (store.users[aUid].xp || 0) >= 100);
-  check('profile: banner picker with 8 banners, dragon locked', A.document.querySelectorAll('#dp-banners .banner-swatch').length === 8 && A.document.querySelector('[data-banner="dragon"]').disabled);
+  check('profile: banner picker with 10 banners, dragon locked', A.document.querySelectorAll('#dp-banners .banner-swatch').length === 10 && A.document.querySelector('[data-banner="dragon"]').disabled);
   check('profile: shows the friend code', $a('dp-sub').textContent.includes(aUser.friendCode));
   $a('dp-close').click();
 

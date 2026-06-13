@@ -24,15 +24,23 @@ Keyboard play: press **1–5** to place the current card into a row.
 
 ## Conquest
 
-An online campaign for Google-signed-in accounts (guests stay casual: no Conquest, no friends list): a winding map of **24 levels** with three escalating challenge types. Solo sprints (reach 29 within 8 rounds, shrinking to a brutal 2), single-hand hunts (score 35+ in one round, climbing to 60+), and AI duels (Deckhand, Navigator, Captain, with head starts up to 25 points). Levels unlock in order and any unlocked level can be replayed at any time. The goal is shown on screen throughout the challenge, and each clear awards **1 to 3 stars** by margin.
+An online campaign for Google-signed-in accounts (guests stay casual: no Conquest, no friends list): a winding, animated map of levels with three challenge types that keep escalating (the catalogue grows over time, so no fixed total is shown). Solo sprints (reach a target total within a round budget), single-hand hunts (score a big number in one round), and AI duels against one, two, or three opponents (Deckhand / Navigator / Captain) with growing head starts and higher win targets. Levels unlock in order and any unlocked one can be replayed. The goal is shown on screen throughout the challenge.
+
+**Stars:** for solo and single-hand levels, 3 stars if you finish with 2+ rounds to spare, 2 with 1 to spare, 1 on the final allowed round. For AI duels, 3 stars if you win in 1-3 rounds, 2 in 4-5, 1 in 6+.
 
 **Lives:** 5 hearts. Failing a level costs one, and quitting mid-level counts as a fail. One heart regrows every **30 minutes**; the regrow clock is a stored timestamp, so going offline and coming back refills exactly the hearts you earned while away. Everything (unlocked level, stars, hearts, regrow clock) saves to your account.
 
+**Resume:** the level you are currently playing is snapshotted to your account after every placement and round, including the deal's seed and your placements so far. If you close the tab or lose connection mid-level, signing back in offers a **Resume** that drops you back into the exact board you left, with no life lost and no progress missing. The snapshot clears only when the level actually resolves.
+
 **Leaderboards:** global and friends-only Conquest boards ranked by total stars (then levels cleared), with 🥇🥈🥉 trophies for the top three. Reachable from the Conquest map and the lobby.
+
+## App-style interface
+
+The home screen is a splash with two doors (Offline / Online). A sticky top app-bar carries the wordmark and quick buttons for **how-to-play (ⓘ)** and a **settings panel (⚙)** with sound, reduce-motion, and fast-count toggles plus account sign-out, in the style of mobile games. The Conquest map is a flowing gold trail of glowing nodes with type icons, a pulsing "next level" marker, a stars-and-hearts header, and auto-scroll to your current spot.
 
 ## Player levels and banners
 
-Wins and Conquest victories earn **XP**: online win +100, tie +40, loss +20; first Conquest clear +50 plus 15 per star, repeat clears +10. Level n to n+1 costs 100·n XP; your level and progress bar show on your profile. **Banners** decorate your profile and leaderboard entry, unlocking by player level (Jade tide at 3, Gold wave at 5, Plum blossom at 8, Lantern glow at 12) or Conquest milestones (Bamboo grove at 10 stars, Gold cloud at 30, Dragon for clearing all 24). Pick the equipped banner from your profile. Profile photos are a possible future addition.
+Wins and Conquest victories earn **XP**: online win +100, tie +40, loss +20; first Conquest clear +50 plus 15 per star, repeat clears +10. Level n to n+1 costs 100·n XP; your level and progress bar show on your profile. **Banners** decorate your profile and leaderboard entry, unlocking by player level (Jade tide at 3, Gold wave at 5, Plum blossom at 8, Lantern glow at 12) or Conquest milestones (Bamboo grove at 10 stars, Gold cloud at 30, Twin clouds at 60, Dragon at 120, Phoenix at 200). Pick the equipped banner from your profile. Profile photos are a possible future addition.
 
 ## Scoring note
 

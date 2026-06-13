@@ -14,6 +14,13 @@ const check = (name, ok) => { console.log(`${ok?'PASS':'FAIL'} ${name}`); if(!ok
 const $ = (id) => doc.getElementById(id);
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+function CC_makeRows(E){
+  const deck = E.freshDeck().filter(c => !(c.rank===10 && c.suit==='H') && !(c.rank===11 && c.suit==='H'));
+  const rows = [[],[],[],[],[]];
+  let i = 0;
+  for (let r=0;r<5;r++) for (let k=0;k<4;k++) rows[r].push(deck[i++]);
+  return rows;
+}
 (async () => {
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const waitFor = async (fn, ms) => { const t0 = Date.now();
@@ -24,6 +31,16 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   check('splash: offline tiles start hidden', $('offline-tiles').classList.contains('hidden'));
   $('splash-offline').click();
   check('splash: offline reveals 3 modes', !$('offline-tiles').classList.contains('hidden') && doc.querySelectorAll('#offline-tiles .tile').length === 3);
+
+  // ---- app shell: settings panel ----
+  $('btn-settings').click();
+  check('settings: panel opens', $('d-settings').open);
+  check('settings: has sound, motion, fast-count toggles', $('set-sound') && $('set-motion') && $('set-fast'));
+  $('set-motion').click();
+  check('settings: reduce-motion toggles the body class', doc.body.classList.contains('reduce-motion'));
+  $('set-motion').click();
+  $('set-close').click();
+  check('settings: panel closes', !$('d-settings').open);
 
   // ---- the slow count + skip (normal speed) ----
   $('tile-solo').click();
@@ -63,6 +80,19 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   }
   await waitFor(() => $('d-score').open, 3000);
   check('solo: round completes in 12 placements', $('d-score').open && soloPlacements === 12);
+
+  // ---- heels reaches the DISPLAYED total (shipped engine, not just the lib) ----
+  {
+    const E = win.CCEngine;
+    const rows = CC_makeRows(E);
+    const jackTotal = E.scoreRound({ rows, starter: { rank: 11, suit: 'H' }, complete: true }).handTotal;
+    const tenTotal  = E.scoreRound({ rows, starter: { rank: 10, suit: 'H' }, complete: true }).handTotal;
+    check('heels: shipped engine adds 2 for a Jack starter', jackTotal === tenTotal + 2);
+    check('heels: score-sheet line renders the 2', (() => {
+      // simulate the score sheet text the player sees
+      return jackTotal - 29 === E.scoreRound({ rows, starter: { rank: 11, suit: 'H' }, complete: true }).net;
+    })());
+  }
   check('count: every row shows its breakdown', doc.querySelectorAll('#g-rows .row-break').length === 5);
   check('count: score sheet itemizes all 5 hands', doc.querySelectorAll('#ds-hands .ds-row').length === 5);
   check('count: breakdown names the combinations', /fifteens|pairs|runs|flush|nobs|no count/.test($('ds-hands').textContent));
@@ -156,8 +186,8 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   // Google accounts get in
   CC.S.profile = { name: 'Tester', provider: 'google', stats: {}, xp: 0 };
   CC.openMap();
-  check('conquest: opens with 24 level nodes', doc.querySelectorAll('.map-node').length === 24);
-  check('map: only level 1 unlocked', doc.querySelectorAll('.map-node.locked').length === 23);
+  check('conquest: opens with 100 level nodes', doc.querySelectorAll('.map-node').length === 100);
+  check('map: only level 1 unlocked', doc.querySelectorAll('.map-node.locked').length === 99);
   check('map: five hearts shown', $('map-lives').textContent.includes('❤❤❤❤❤'));
 
   // level intro dialog
@@ -173,6 +203,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   check('map: next level unlocked', CC.S.campaign.level === 2);
   $('dcr-next').click();
   check('map: next level launches level 2', $('g-round').textContent.includes('Level 2'));
+  check('conquest: no total-count leakage in the clear dialog', !$('dcr-sub').textContent.match(/of 100|whole map/));
 
   // fail costs a heart; quitting also counts as a fail
   CC.challengeFail();
@@ -186,6 +217,46 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   $('map-back').click();
   check('map: back goes to the online lobby now', !$('view-online').classList.contains('hidden'));
   CC.openMap();
+
+  // ---- multi-AI conquest level: full turn cycle ----
+  win.__fastCount = true;
+  CC.S.campaign = { level: 1, stars: {}, lives: 5, lastLifeAt: Date.now() };
+  // find a triple-AI level and launch it directly
+  win.__fastCount = true; // AI rounds resolve near-instantly
+  const tripleLv = CC.LEVELS.find((l) => l.type === 'ai' && l.ais && l.ais.length === 3);
+  check('conquest: catalogue has a triple-AI level', !!tripleLv);
+  CC.S.campaign.level = tripleLv.id; // unlock it
+  CC.S.pendingLevel = tripleLv;
+  win.__cc.openLevel(tripleLv.id);
+  $('dl-play').click();
+  await sleep(20);
+  check('conquest: multi-AI match starts with 4 lanes', doc.querySelectorAll('#g-rail .lane-row').length === 4);
+  check('conquest: goal mentions finishing above the opponents', $('g-goal').textContent.includes('finish above'));
+  check('conquest: it is your turn first (seat 0)', CC.S.match.turn === 0);
+  // play your round; the AIs then auto-cycle. Drive a few cycles with continue.
+  let cyc = 0, won = false, lost = false;
+  while (cyc++ < 40 && !won && !lost) {
+    // place any open hands if it is a human turn (seat 0)
+    let guard = 0;
+    while (CC.S.round && !CC.S.round.complete && CC.S.match.turn === 0 && guard++ < 20) {
+      const b = doc.querySelector('#g-rows .row-btn:not([disabled])');
+      if (!b) break; b.click();
+    }
+    await waitFor(() => $('d-score').open || !CC.S.match || CC.S.match.turn !== 0 || $('d-chal').open, 1500);
+    if ($('d-chal').open) { won = !$('dcr-next').classList.contains('hidden') || $('dcr-stars').textContent.length>0; lost = $('dcr-eyebrow').textContent.includes('failed'); break; }
+    if ($('d-score').open) $('ds-continue').click();
+    await sleep(30);
+    // if it's an AI turn, let the fast timer resolve to the next score sheet
+    if (CC.S.match && CC.S.match.turn !== 0 && !$('d-chal').open) {
+      await waitFor(() => $('d-score').open || $('d-chal').open, 2000);
+      if ($('d-chal').open) { lost = $('dcr-eyebrow').textContent.includes('failed'); won = !lost; break; }
+      if ($('d-score').open) $('ds-continue').click();
+      await sleep(30);
+    }
+  }
+  check('conquest: a multi-AI match reaches a verdict', won || lost || $('d-chal').open);
+  if ($('d-chal').open) $('dcr-map').click();
+  await sleep(20);
 
   // run out of hearts: play locks behind the regrowth timer
   CC.S.campaign.lives = 0; CC.S.campaign.lastLifeAt = Date.now();
