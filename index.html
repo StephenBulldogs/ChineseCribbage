@@ -230,6 +230,28 @@
   dialog{animation:dlgPop .2s cubic-bezier(.2,.9,.3,1.2)}
   @keyframes dlgPop{from{transform:translateY(12px) scale(.97);opacity:0}to{transform:none;opacity:1}}
 
+
+  /* ----- bottom tab bar (app shell) ----- */
+  body{padding-bottom:0}
+  .wrap{padding-bottom:84px}
+  .botnav{position:fixed;left:0;right:0;bottom:0;z-index:60;display:none;
+    grid-template-columns:repeat(5,1fr);gap:2px;padding:8px 6px max(8px,env(safe-area-inset-bottom)) 6px;
+    background:linear-gradient(180deg,rgba(31,16,14,.92),rgba(20,11,9,.98));
+    border-top:2px solid var(--brass-dim);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+  .botnav.show{display:grid}
+  .botnav-btn{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;
+    border-radius:14px;color:var(--cream-dim);transition:color .14s,background .14s;font-size:11px}
+  .botnav-btn .bn-ic{font-size:21px;line-height:1}
+  .botnav-btn .bn-lbl{font-weight:700;letter-spacing:.3px}
+  .botnav-btn.active{color:var(--brass);background:rgba(201,162,39,.12)}
+  .botnav-btn.active .bn-ic{filter:drop-shadow(0 0 6px #C9A22788)}
+  .botnav-btn:active{transform:scale(.92)}
+  .bn-badge{position:absolute;top:2px;right:50%;transform:translateX(18px);min-width:16px;height:16px;
+    border-radius:999px;background:var(--ink-red);color:#fff;font-size:10px;font-weight:700;
+    display:flex;align-items:center;justify-content:center;padding:0 4px;border:1px solid #00000044}
+  .tabhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .tabhead h2{font-family:var(--display);font-size:30px}
+  @media (min-width:760px){ .botnav{max-width:880px;margin:0 auto;border-radius:18px 18px 0 0} }
   /* ----- online hub (app-game styling) ----- */
   .acctbar{display:flex;align-items:center;gap:10px;margin-bottom:16px}
   .hub-grid{display:flex;flex-direction:column;gap:14px}
@@ -541,6 +563,38 @@
     </div>
   </main>
 
+  <!-- ============ FRIENDS TAB ============ -->
+  <main id="view-friends" class="hidden">
+    <div class="tabhead"><h2>Friends</h2></div>
+    <div class="online-box" style="margin-top:0">
+      <div id="tab-friends-auth" class="pub-empty hidden">Sign in from the Home tab to add friends.</div>
+      <div class="pub" id="tab-friends-wrap">
+        <h3>Your friends <span class="age">code: <b id="my-friend-code2">-</b></span></h3>
+        <div id="o-friends-list2"><div class="pub-empty">No friends yet. Swap codes to add one.</div></div>
+        <div class="join-row" style="margin-top:10px">
+          <input type="text" id="friend-code2" maxlength="6" placeholder="Friend code" style="text-transform:uppercase">
+          <button class="btn btn-ghost" id="friend-add2">Add</button>
+        </div>
+        <div class="err hidden" id="friend-err2"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ============ MESSAGES TAB ============ -->
+  <main id="view-messages" class="hidden">
+    <div class="tabhead"><h2>Messages</h2></div>
+    <div class="online-box" style="margin-top:0">
+      <div id="msg-list"><div class="pub-empty">No messages yet.</div></div>
+    </div>
+  </main>
+
+  <nav class="botnav" id="botnav">
+    <button class="botnav-btn" data-tab="home"><span class="bn-ic">⌂</span><span class="bn-lbl">Home</span></button>
+    <button class="botnav-btn" data-tab="conquest"><span class="bn-ic">⚔</span><span class="bn-lbl">Conquest</span></button>
+    <button class="botnav-btn" data-tab="friends"><span class="bn-ic">☻</span><span class="bn-lbl">Friends</span><span class="bn-badge hidden" id="bn-friends-badge"></span></button>
+    <button class="botnav-btn" data-tab="messages"><span class="bn-ic">✉</span><span class="bn-lbl">Messages</span><span class="bn-badge hidden" id="bn-msg-badge"></span></button>
+    <button class="botnav-btn" data-tab="profile"><span class="bn-ic">◉</span><span class="bn-lbl">Profile</span></button>
+  </nav>
   <!-- ============ DIALOGS ============ -->
   <dialog id="d-board">
     <div class="d-eyebrow">Conquest leaderboard</div>
@@ -993,6 +1047,7 @@ const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const makeRoomCode = () => Array.from({length:5},()=>CODE_ALPHABET[Math.floor(Math.random()*CODE_ALPHABET.length)]).join('');
 </script>
 <script>
+
 /* =====================================================================
    UI
    ===================================================================== */
@@ -1346,12 +1401,17 @@ function saveCampaign(){
   if (S.uid && fdb) fdb.ref('users/' + S.uid + '/campaign').set(S.campaign).catch(() => {});
   pushLeaderboard();
 }
-function mergeCampaign(stored){
-  if (!stored) return;
-  const c = S.campaign;
-  c.level = Math.max(c.level, stored.level || 1);
-  for (const k in (stored.stars || {})) c.stars[k] = Math.max(c.stars[k] || 0, stored.stars[k]);
-  if (typeof stored.lives === 'number') { c.lives = stored.lives; c.lastLifeAt = stored.lastLifeAt || Date.now(); }
+function loadCampaign(stored){
+  // Replace local campaign with THIS account's stored progress (never merge
+  // with whatever was in memory from a previous session/account).
+  S.campaign = blankCampaign();
+  if (stored){
+    const c = S.campaign;
+    c.level = stored.level || 1;
+    c.stars = {};
+    for (const k in (stored.stars || {})) c.stars[k] = stored.stars[k];
+    if (typeof stored.lives === 'number') { c.lives = stored.lives; c.lastLifeAt = stored.lastLifeAt || Date.now(); }
+  }
   refreshLives();
 }
 
@@ -1838,6 +1898,7 @@ function doSignOut(){
   S.uid=null; S.profile=null; S.myName=''; S.friends={}; S.challenges={};
   for(const u in S.friendWatches){ S.friendWatches[u](); }
   S.friendWatches={}; S.friendInfo={};
+  resetAccountState();
   renderAccount();
   if(S.view==='online' && !S.code) oShow('auth');
 }
@@ -1851,7 +1912,19 @@ async function onAuth(user){
   }
   await establishUser(user);
 }
+function resetAccountState(){
+  S.profile=null;
+  S.campaign=blankCampaign();
+  S.activeSnap=null;
+  S.friends={}; S.friendInfo={}; S.challenges={};
+  for(const u in S.friendWatches){ try{ S.friendWatches[u](); }catch(e){} }
+  S.friendWatches={};
+  S.statsRecorded={};
+}
 async function establishUser(user){
+  // Wipe any in-memory state from a previous account/guest in this browser
+  // session so nothing leaks across accounts.
+  resetAccountState();
   S.uid=user.uid;
   try{
     const snap=await fdb.ref('users/'+user.uid).get();
@@ -1868,7 +1941,7 @@ async function establishUser(user){
       await fdb.ref('friendCodes/'+friendCode).set(user.uid);
     }
     S.myName=S.profile.name;
-    mergeCampaign(S.profile.campaign);
+    loadCampaign(S.profile.campaign);
     S.activeSnap = S.profile.active || null;
     saveCampaign();
     // user-level presence for the friends list
@@ -2706,6 +2779,7 @@ document.addEventListener('keydown',(e)=>{
     }
   }
 });
+
 
 </script>
 </body>

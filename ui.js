@@ -1,3 +1,4 @@
+
 /* =====================================================================
    UI
    ===================================================================== */
@@ -351,12 +352,17 @@ function saveCampaign(){
   if (S.uid && fdb) fdb.ref('users/' + S.uid + '/campaign').set(S.campaign).catch(() => {});
   pushLeaderboard();
 }
-function mergeCampaign(stored){
-  if (!stored) return;
-  const c = S.campaign;
-  c.level = Math.max(c.level, stored.level || 1);
-  for (const k in (stored.stars || {})) c.stars[k] = Math.max(c.stars[k] || 0, stored.stars[k]);
-  if (typeof stored.lives === 'number') { c.lives = stored.lives; c.lastLifeAt = stored.lastLifeAt || Date.now(); }
+function loadCampaign(stored){
+  // Replace local campaign with THIS account's stored progress (never merge
+  // with whatever was in memory from a previous session/account).
+  S.campaign = blankCampaign();
+  if (stored){
+    const c = S.campaign;
+    c.level = stored.level || 1;
+    c.stars = {};
+    for (const k in (stored.stars || {})) c.stars[k] = stored.stars[k];
+    if (typeof stored.lives === 'number') { c.lives = stored.lives; c.lastLifeAt = stored.lastLifeAt || Date.now(); }
+  }
   refreshLives();
 }
 
@@ -843,6 +849,7 @@ function doSignOut(){
   S.uid=null; S.profile=null; S.myName=''; S.friends={}; S.challenges={};
   for(const u in S.friendWatches){ S.friendWatches[u](); }
   S.friendWatches={}; S.friendInfo={};
+  resetAccountState();
   renderAccount();
   if(S.view==='online' && !S.code) oShow('auth');
 }
@@ -856,7 +863,19 @@ async function onAuth(user){
   }
   await establishUser(user);
 }
+function resetAccountState(){
+  S.profile=null;
+  S.campaign=blankCampaign();
+  S.activeSnap=null;
+  S.friends={}; S.friendInfo={}; S.challenges={};
+  for(const u in S.friendWatches){ try{ S.friendWatches[u](); }catch(e){} }
+  S.friendWatches={};
+  S.statsRecorded={};
+}
 async function establishUser(user){
+  // Wipe any in-memory state from a previous account/guest in this browser
+  // session so nothing leaks across accounts.
+  resetAccountState();
   S.uid=user.uid;
   try{
     const snap=await fdb.ref('users/'+user.uid).get();
@@ -873,7 +892,7 @@ async function establishUser(user){
       await fdb.ref('friendCodes/'+friendCode).set(user.uid);
     }
     S.myName=S.profile.name;
-    mergeCampaign(S.profile.campaign);
+    loadCampaign(S.profile.campaign);
     S.activeSnap = S.profile.active || null;
     saveCampaign();
     // user-level presence for the friends list
@@ -1711,3 +1730,4 @@ document.addEventListener('keydown',(e)=>{
     }
   }
 });
+
