@@ -36,6 +36,8 @@ An online campaign for Google-signed-in accounts (guests stay casual: no Conques
 
 ## App-style interface
 
+The online section opens on a **menu hub** of three large jade-and-gold cards rather than one long form: **Make Table** (host 2-4 players, configure AI seats, public or private), **Find Table** (browse open/in-play tables, join by code, manage friends and challenges), and **Conquest** (the campaign). A back arrow returns to the hub from any panel. A signed-in account bar shows an avatar, player level and an XP bar.
+
 The home screen is a splash with two doors (Offline / Online). A sticky top app-bar carries the wordmark and quick buttons for **how-to-play (ⓘ)** and a **settings panel (⚙)** with sound, reduce-motion, and fast-count toggles plus account sign-out, in the style of mobile games. The Conquest map is a flowing gold trail of glowing nodes with type icons, a pulsing "next level" marker, a stars-and-hearts header, and auto-scroll to your current spot.
 
 ## Player levels and banners

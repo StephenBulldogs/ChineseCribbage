@@ -462,6 +462,12 @@ function renderConquestPanel(){
 function renderLobbyGates(){
   const guest = S.profile && S.profile.provider==='guest';
   const fr=$('lobby-friends'); if(fr) fr.classList.toggle('hidden', !S.uid || guest);
+  const sub=$('hub-conquest-sub');
+  if (sub){
+    sub.textContent = guest ? 'Sign in with Google to climb the campaign.'
+      : (S.activeSnap ? `Resume level ${S.activeSnap.id}, or pick a level on the map.`
+      : `Level ${S.campaign.level} · ${totalStars()} stars earned.`);
+  }
   renderConquestPanel();
 }
 
@@ -1131,7 +1137,15 @@ async function openBoard(tab){
 function renderAccount(){
   const bar=$('o-account'); if(!bar) return;
   if(!S.uid||!S.profile){ bar.innerHTML=''; renderLobbyGates(); return; }
-  bar.innerHTML=`<span class="chip"><span class="dot on"></span>${esc(S.profile.name)}</span>
+  const lv=levelFromXp(S.profile.xp);
+  const initial=(S.profile.name||'?').trim().charAt(0).toUpperCase();
+  bar.innerHTML=`<div class="acct-chip">
+      <div class="acct-av">${esc(initial)}</div>
+      <div class="acct-meta">
+        <div class="acct-name">${esc(S.profile.name)}</div>
+        <div class="acct-lv"><span class="lvchip">Lv ${lv.level}</span><span class="acct-xp"><i style="width:${Math.round((lv.into/lv.need)*100)}%"></i></span></div>
+      </div>
+    </div>
     <button class="btn btn-ghost mini" id="acct-profile">profile</button>
     <button class="btn btn-ghost mini" id="acct-out">sign out</button>`;
   $('acct-profile').addEventListener('click',()=>openProfile(null));
@@ -1154,7 +1168,7 @@ function renderAccount(){
      the same name. The live move log restores their half-played round.
    ==================================================================== */
 function oShow(part){
-  for (const p of ['o-auth','o-lobby','o-setup','o-wait','o-game']) $(p).classList.toggle('hidden',p!=='o-'+part);
+  for (const p of ['o-auth','o-lobby','o-make','o-find','o-conquest-panel','o-setup','o-wait','o-game']) $(p).classList.toggle('hidden',p!=='o-'+part);
 }
 const seatKeys=(room)=>Array.from({length:room.size||2},(_,k)=>'p'+k);
 const seatName=(room,k)=>{const p=(room.players||{})['p'+k];return p?p.name:'open seat';};
@@ -1582,6 +1596,18 @@ $('splash-offline').addEventListener('click',()=>{
   $('splash-offline').setAttribute('aria-expanded', String(!$('offline-tiles').classList.contains('hidden')));
 });
 $('splash-online').addEventListener('click',openOnline);
+// hub navigation
+function requireAuth(then){ if(!S.uid){ oShow('auth'); return; } then(); }
+$('hub-make').addEventListener('click',()=>requireAuth(()=>{ renderSeatConfig(); oShow('make'); }));
+$('hub-find').addEventListener('click',()=>requireAuth(()=>{ renderPublicRooms(); renderFriends(); oShow('find'); }));
+$('hub-conquest').addEventListener('click',()=>{
+  if(!S.uid){ oShow('auth'); return; }
+  if(S.profile && S.profile.provider==='guest'){ renderConquestPanel(); oShow('conquest-panel'); return; }
+  openMap();
+});
+$('make-back').addEventListener('click',()=>oShow('lobby'));
+$('find-back').addEventListener('click',()=>oShow('lobby'));
+$('conq-back').addEventListener('click',()=>oShow('lobby'));
 $('map-back').addEventListener('click',()=>{ if(S.mapTick) clearInterval(S.mapTick); show('online'); oShow('lobby'); });
 $('map-board').addEventListener('click',()=>openBoard());
 $('map-board-lobby').addEventListener('click',()=>openBoard());

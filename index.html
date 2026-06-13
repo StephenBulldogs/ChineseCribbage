@@ -229,6 +229,40 @@
   .set-sep{height:1px;background:var(--lacquer-edge);margin:14px 0}
   dialog{animation:dlgPop .2s cubic-bezier(.2,.9,.3,1.2)}
   @keyframes dlgPop{from{transform:translateY(12px) scale(.97);opacity:0}to{transform:none;opacity:1}}
+
+  /* ----- online hub (app-game styling) ----- */
+  .acctbar{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+  .hub-grid{display:flex;flex-direction:column;gap:14px}
+  .hub-card{position:relative;display:flex;flex-direction:column;align-items:flex-start;text-align:left;
+    padding:20px 20px 18px;border-radius:20px;border:2px solid #00000033;overflow:hidden;
+    box-shadow:0 8px 22px rgba(0,0,0,.45), inset 0 1px 0 #ffffff22;transition:transform .14s,box-shadow .14s}
+  .hub-card:hover{transform:translateY(-3px);box-shadow:0 12px 28px rgba(0,0,0,.55), inset 0 1px 0 #ffffff33}
+  .hub-card:active{transform:scale(.98)}
+  .hub-card .hc-icon{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:54px;opacity:.22;line-height:1}
+  .hub-card .hc-title{font-family:var(--display);font-size:26px;color:#fff;text-shadow:0 2px 6px rgba(0,0,0,.5);letter-spacing:.3px}
+  .hub-card .hc-sub{font-size:12.5px;color:#fff;opacity:.92;margin-top:5px;max-width:78%;line-height:1.5;text-shadow:0 1px 4px rgba(0,0,0,.5)}
+  .hub-card.make{background:linear-gradient(120deg,#3E8E7E,#1d4a3f)}
+  .hub-card.make{border-color:#5fc9b3}
+  .hub-card.find{background:linear-gradient(120deg,#8A6F1F,#5a3b14);border-color:#d8b552}
+  .hub-card.conquest{background:linear-gradient(120deg,#B5402F,#6e2018);border-color:#e08070}
+  .panel-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+  .panel-head h2{font-family:var(--display);font-size:26px;flex:1}
+  .field-label{font-size:11px;font-weight:700;letter-spacing:1.2px;color:var(--brass);text-transform:uppercase;margin:14px 0 8px}
+  .acct-chip{display:flex;align-items:center;gap:10px;background:rgba(28,14,12,.7);border:1px solid var(--lacquer-edge);
+    border-radius:999px;padding:5px 6px 5px 5px;flex:1}
+  .acct-av{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-family:var(--display);font-size:15px;color:var(--lacquer-deep);background:var(--brass);flex:none}
+  .acct-meta{flex:1;min-width:0}
+  .acct-name{font-size:13px;font-weight:700;color:var(--cream);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .acct-lv{display:flex;align-items:center;gap:6px;margin-top:2px}
+  .acct-lv .lvchip{font-size:9px;font-weight:700;color:var(--brass)}
+  .acct-xp{flex:1;height:5px;border-radius:3px;background:var(--lacquer-deep);overflow:hidden}
+  .acct-xp i{display:block;height:100%;background:var(--brass)}
+  /* resource pills, mockup-style */
+  .res{display:flex;align-items:center;gap:5px;background:rgba(28,14,12,.7);border:1px solid var(--lacquer-edge);
+    border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;color:var(--cream)}
+  .res .rc{color:var(--brass)}
+  .res .rj{color:var(--jade)}
   /* ----- conquest map flourish ----- */
   .map-top{display:flex;align-items:center;justify-content:space-between;gap:10px;
     background:linear-gradient(100deg,rgba(58,30,25,.9),rgba(28,14,12,.9));border:1px solid var(--brass-dim);
@@ -410,44 +444,76 @@
       <div class="err hidden" id="auth-err"></div>
       <button class="btn btn-ghost" id="auth-back" style="width:100%;margin-top:18px">Back</button>
     </div>
-    <div class="online-box" id="o-lobby">
-      <div class="roster" id="o-account"></div>
-      <h2>Online table</h2>
-      <p>Turn-based · fresh shuffle every round.</p>
+    <!-- HUB: menu of online modes -->
+    <div class="online-box hub" id="o-lobby">
+      <div class="acctbar" id="o-account"></div>
+      <div class="hub-grid">
+        <button class="hub-card make" id="hub-make">
+          <span class="hc-icon">⚒</span>
+          <span class="hc-title">Make Table</span>
+          <span class="hc-sub">Host 2 to 4 players, add AI seats, public or private.</span>
+        </button>
+        <button class="hub-card find" id="hub-find">
+          <span class="hc-icon">⌕</span>
+          <span class="hc-title">Find Table</span>
+          <span class="hc-sub">Browse open tables, join by code, or challenge a friend.</span>
+        </button>
+        <button class="hub-card conquest" id="hub-conquest">
+          <span class="hc-icon">⚔</span>
+          <span class="hc-title">Conquest</span>
+          <span class="hc-sub" id="hub-conquest-sub">Climb the campaign. Earn stars, banners and XP.</span>
+        </button>
+      </div>
+      <button class="btn btn-ghost" id="o-back" style="width:100%;margin-top:14px">Back to home</button>
+    </div>
+
+    <!-- MAKE TABLE -->
+    <div class="online-box hidden" id="o-make">
+      <div class="panel-head"><button class="icon-btn" id="make-back">‹</button><h2>Make Table</h2></div>
+      <div class="field-label">Players</div>
       <div class="size-row" role="group" aria-label="Number of players">
         <span class="pill" role="button" tabindex="0" data-n="2" aria-pressed="true">2 players</span>
         <span class="pill" role="button" tabindex="0" data-n="3" aria-pressed="false">3 players</span>
         <span class="pill" role="button" tabindex="0" data-n="4" aria-pressed="false">4 players</span>
       </div>
       <div class="seat-cfg" id="o-seats"></div>
+      <div class="field-label">Visibility</div>
       <div class="vis-row" role="group" aria-label="Room visibility">
         <span class="pill" role="button" tabindex="0" data-v="public" aria-pressed="true">public table</span>
         <span class="pill" role="button" tabindex="0" data-v="private" aria-pressed="false">private room</span>
       </div>
-      <button class="btn btn-primary" id="o-create" style="width:100%">Open a table</button>
-      <div class="join-row" style="margin-top:12px">
-        <input type="text" id="o-code" maxlength="5" placeholder="Room code" style="text-transform:uppercase">
-        <button class="btn btn-ghost" id="o-join">Join</button>
-      </div>
+      <button class="btn btn-primary" id="o-create" style="width:100%;margin-top:6px">Open a table</button>
       <div class="err hidden" id="o-err"></div>
-      <div class="pub" id="lobby-conquest">
-        <h3>Conquest <button class="btn btn-ghost mini" id="map-board-lobby" style="float:right">leaderboard</button></h3>
-        <div id="o-conquest"><div class="pub-empty">Sign in to play Conquest.</div></div>
+    </div>
+
+    <!-- FIND TABLE -->
+    <div class="online-box hidden" id="o-find">
+      <div class="panel-head"><button class="icon-btn" id="find-back">‹</button><h2>Find Table</h2></div>
+      <div class="join-row">
+        <input type="text" id="o-code" maxlength="5" placeholder="Enter room code" style="text-transform:uppercase">
+        <button class="btn btn-primary" id="o-join">Join</button>
       </div>
+      <div class="err hidden" id="o-find-err"></div>
       <div class="pub">
         <h3>Open tables</h3>
         <div id="o-public"><div class="pub-empty">Looking for open tables…</div></div>
       </div>
       <div class="pub" id="lobby-friends">
         <h3>Friends <span class="age">your code: <b id="my-friend-code">-</b></span></h3>
-        <div id="o-friends-list"><div class="pub-empty">No friends yet. swap codes to add one.</div></div>
+        <div id="o-friends-list"><div class="pub-empty">No friends yet. Swap codes to add one.</div></div>
         <div class="join-row" style="margin-top:10px">
           <input type="text" id="friend-code" maxlength="6" placeholder="Friend code" style="text-transform:uppercase">
           <button class="btn btn-ghost" id="friend-add">Add</button>
         </div>
         <div class="err hidden" id="friend-err"></div>
       </div>
-      <button class="btn btn-ghost" id="o-back" style="width:100%;margin-top:16px">Back</button>
+    </div>
+
+    <!-- CONQUEST INTRO -->
+    <div class="online-box hidden" id="o-conquest-panel">
+      <div class="panel-head"><button class="icon-btn" id="conq-back">‹</button><h2>Conquest</h2>
+        <button class="btn btn-ghost mini" id="map-board-lobby">leaderboard</button></div>
+      <div id="o-conquest"><div class="pub-empty">Sign in to play Conquest.</div></div>
     </div>
     <div class="online-box hidden" id="o-setup">
       <h2>Online play needs a one-time setup</h2>
@@ -1391,6 +1457,12 @@ function renderConquestPanel(){
 function renderLobbyGates(){
   const guest = S.profile && S.profile.provider==='guest';
   const fr=$('lobby-friends'); if(fr) fr.classList.toggle('hidden', !S.uid || guest);
+  const sub=$('hub-conquest-sub');
+  if (sub){
+    sub.textContent = guest ? 'Sign in with Google to climb the campaign.'
+      : (S.activeSnap ? `Resume level ${S.activeSnap.id}, or pick a level on the map.`
+      : `Level ${S.campaign.level} · ${totalStars()} stars earned.`);
+  }
   renderConquestPanel();
 }
 
@@ -2060,7 +2132,15 @@ async function openBoard(tab){
 function renderAccount(){
   const bar=$('o-account'); if(!bar) return;
   if(!S.uid||!S.profile){ bar.innerHTML=''; renderLobbyGates(); return; }
-  bar.innerHTML=`<span class="chip"><span class="dot on"></span>${esc(S.profile.name)}</span>
+  const lv=levelFromXp(S.profile.xp);
+  const initial=(S.profile.name||'?').trim().charAt(0).toUpperCase();
+  bar.innerHTML=`<div class="acct-chip">
+      <div class="acct-av">${esc(initial)}</div>
+      <div class="acct-meta">
+        <div class="acct-name">${esc(S.profile.name)}</div>
+        <div class="acct-lv"><span class="lvchip">Lv ${lv.level}</span><span class="acct-xp"><i style="width:${Math.round((lv.into/lv.need)*100)}%"></i></span></div>
+      </div>
+    </div>
     <button class="btn btn-ghost mini" id="acct-profile">profile</button>
     <button class="btn btn-ghost mini" id="acct-out">sign out</button>`;
   $('acct-profile').addEventListener('click',()=>openProfile(null));
@@ -2083,7 +2163,7 @@ function renderAccount(){
      the same name. The live move log restores their half-played round.
    ==================================================================== */
 function oShow(part){
-  for (const p of ['o-auth','o-lobby','o-setup','o-wait','o-game']) $(p).classList.toggle('hidden',p!=='o-'+part);
+  for (const p of ['o-auth','o-lobby','o-make','o-find','o-conquest-panel','o-setup','o-wait','o-game']) $(p).classList.toggle('hidden',p!=='o-'+part);
 }
 const seatKeys=(room)=>Array.from({length:room.size||2},(_,k)=>'p'+k);
 const seatName=(room,k)=>{const p=(room.players||{})['p'+k];return p?p.name:'open seat';};
@@ -2511,6 +2591,18 @@ $('splash-offline').addEventListener('click',()=>{
   $('splash-offline').setAttribute('aria-expanded', String(!$('offline-tiles').classList.contains('hidden')));
 });
 $('splash-online').addEventListener('click',openOnline);
+// hub navigation
+function requireAuth(then){ if(!S.uid){ oShow('auth'); return; } then(); }
+$('hub-make').addEventListener('click',()=>requireAuth(()=>{ renderSeatConfig(); oShow('make'); }));
+$('hub-find').addEventListener('click',()=>requireAuth(()=>{ renderPublicRooms(); renderFriends(); oShow('find'); }));
+$('hub-conquest').addEventListener('click',()=>{
+  if(!S.uid){ oShow('auth'); return; }
+  if(S.profile && S.profile.provider==='guest'){ renderConquestPanel(); oShow('conquest-panel'); return; }
+  openMap();
+});
+$('make-back').addEventListener('click',()=>oShow('lobby'));
+$('find-back').addEventListener('click',()=>oShow('lobby'));
+$('conq-back').addEventListener('click',()=>oShow('lobby'));
 $('map-back').addEventListener('click',()=>{ if(S.mapTick) clearInterval(S.mapTick); show('online'); oShow('lobby'); });
 $('map-board').addEventListener('click',()=>openBoard());
 $('map-board-lobby').addEventListener('click',()=>openBoard());

@@ -171,8 +171,7 @@ function CC_makeRows(E){
   $('splash-online').click();
   check('online requires sign-in (auth panel shown)', !$('o-auth').classList.contains('hidden'));
   check('Google + guest options, no passwords', $('auth-google') !== null && $('auth-guest') !== null);
-  check('lobby has visibility pills', doc.querySelectorAll('#o-lobby .vis-row .pill').length === 2);
-  check('lobby has an open-tables section', $('o-public') !== null);
+  check('online hub has Make/Find/Conquest cards', $('hub-make') !== null && $('hub-find') !== null && $('hub-conquest') !== null);
   $('auth-back').click();
   check('back returns home', !$('view-home').classList.contains('hidden'));
 

@@ -113,10 +113,14 @@ const playOut = async (win) => {
   const cA = makeClient(), A = cA.window;
   const $a = (id) => A.document.getElementById(id);
   await signIn(cA, 'Anna');
-  check('A: signed in with Google, lobby shown', !$a('o-lobby').classList.contains('hidden'));
-  check('A: account bar shows Anna', $a('o-account').textContent.includes('Anna'));
-  A.document.querySelector('.size-row .pill[data-n="3"]').click(); await sleep(20);
-  A.document.querySelector('#o-seats .pill[data-seat="1"][data-cfg="medium"]').click(); await sleep(20);
+  check('A: signed in with Google, hub shown', !$a('o-lobby').classList.contains('hidden'));
+  check('A: hub shows Make/Find/Conquest cards', $a('hub-make') && $a('hub-find') && $a('hub-conquest'));
+  check('A: account bar shows Anna with a level chip', $a('o-account').textContent.includes('Anna') && $a('o-account').textContent.includes('Lv'));
+  $a('hub-make').click(); await sleep(20);
+  check('A: Make Table panel opened', !$a('o-make').classList.contains('hidden'));
+  check('A: Make Table has the visibility pills', A.document.querySelectorAll('#o-make .vis-row .pill').length === 2);
+  A.document.querySelector('#o-make .size-row .pill[data-n="3"]').click(); await sleep(20);
+  A.document.querySelector('#o-make #o-seats .pill[data-seat="1"][data-cfg="medium"]').click(); await sleep(20);
   $a('o-create').click(); await sleep(120);
   const code = $a('o-room-code').textContent.trim();
   check('room: 3 seats, AI in p2', getPath('rooms/'+code).size === 3 && getPath('rooms/'+code).players.p2.ai === true);
@@ -125,6 +129,8 @@ const playOut = async (win) => {
   const cB = makeClient(), B = cB.window;
   const $b = (id) => B.document.getElementById(id);
   await signIn(cB, 'Ben');
+  $b('hub-find').click(); await sleep(40);
+  check('B: Find Table lists open tables', !$b('o-find').classList.contains('hidden'));
   B.document.querySelector('#o-public [data-join]').click();
   await waitFor(() => (getPath('rooms/'+code)||{}).status === 'playing', 2000);
   check('room auto-starts when seats fill', getPath('rooms/'+code).status === 'playing');
@@ -141,7 +147,8 @@ const playOut = async (win) => {
   const cC = makeClient(50), C = cC.window; // 50ms takeover window for the test
   const $c = (id) => C.document.getElementById(id);
   await signIn(cC, 'Cara');
-  check("C: lobby shows Anna's table as watchable", $c('o-public').textContent.includes('in play') && $c('o-public').textContent.includes('Watch'));
+  $c('hub-find').click(); await sleep(40);
+  check("C: Find Table shows Anna's table as watchable", $c('o-public').textContent.includes('in play') && $c('o-public').textContent.includes('Watch'));
   C.document.querySelector('#o-public [data-join]').click();
   await waitFor(() => !$c('o-game').classList.contains('hidden'), 2000);
   check('C: spectating the full table', $c('o-game-roster').textContent.includes('spectating'));
@@ -166,6 +173,7 @@ const playOut = async (win) => {
   const cB2 = makeClient(), B2 = cB2.window;
   const $b2 = (id) => B2.document.getElementById(id);
   await signIn(cB2, 'Ben');
+  $b2('hub-find').click(); await sleep(30);
   $b2('o-code').value = code;
   $b2('o-join').click();
   await waitFor(() => $b2('o-play').children.length > 0, 2000);
@@ -287,11 +295,10 @@ const playOut = async (win) => {
   const cG = makeClient(), G = cG.window;
   await signIn(cG, 'Gus', false);
   const $g = (id) => G.document.getElementById(id);
-  check('guest: friends section hidden', $g('lobby-friends').classList.contains('hidden'));
-  check('guest: Conquest panel shows the sign-in note', $g('o-conquest').textContent.includes('Google'));
-  G.__cc.openMap();
-  await sleep(30);
-  check('guest: cannot enter the Conquest map', G.document.getElementById('view-map').classList.contains('hidden'));
+  $g('hub-find').click(); await sleep(30);
+  check('guest: friends section hidden in Find Table', $g('lobby-friends').classList.contains('hidden'));
+  $g('hub-conquest').click(); await sleep(30);
+  check('guest: Conquest routed to the sign-in note, not the map', G.document.getElementById('view-map').classList.contains('hidden') && $g('o-conquest').textContent.includes('Google'));
 
   console.log(fails === 0 ? '\nMULTIPLAYER V6 TEST PASSED' : `\n${fails} FAILURES`);
   process.exit(fails ? 1 : 0);
