@@ -109,3 +109,14 @@ The engine port is verified against the same test vectors as the mobile app, inc
 ## Honest limits of casual-mode online
 
 The live move log that powers spectating and rejoin includes the active player's shuffle seed, which means a determined opponent with the browser console open could derive your hidden crib and upcoming cards. Fine for friends and family; for competitive public play, move the seed server-side (Cloud Functions) and publish only the placed cards.
+
+## App-style visual layer
+
+The interface is built to feel like a polished mobile game while remaining a single self-contained HTML file. The looks are reconstructed in CSS/SVG (not embedded screenshots) so they scale across screen sizes and wire to live game state:
+
+- Bottom tab bar (Home / Conquest / Friends / Messages / Profile) for primary navigation, with live badges for online friends and pending challenges.
+- Unlockable card-back designs (Classic, Jade Garden, Red Lacquer Imperial, Bamboo Minimalist, Porcelain Blue & White, Gold Dragon Ornate, Dark Night Tournament), unlocked by player level or Conquest stars and chosen from the profile dialog.
+- Ornate jade/lacquer/gold buttons and splash doors with depth and cloud-corner motifs.
+- The Conquest map uses a compressed embedded background image behind the node trail with a dark legibility scrim; nodes are styled as stone/jade tiles.
+
+The one raster asset embedded is the Conquest map backdrop (compressed JPEG data URI, ~107KB); everything else is pure CSS/SVG.

@@ -272,6 +272,18 @@ function CC_makeRows(E){
   $('dl-close').click();
   $('map-back').click();
 
+  // ---- app-feel additions: card designs + bottom-tab navigation ----
+  check('card design catalogue exists (7 designs)', Array.isArray(CC.CARD_DESIGNS) && CC.CARD_DESIGNS.length === 7);
+  check('classic card design is always unlocked', CC.CARD_DESIGNS[0].need(1, 0) === true);
+  check('a premium design is gated', CC.CARD_DESIGNS.some(d => d.need(1, 0) === false));
+  check('bottom nav is present with five tabs', doc.querySelectorAll('.botnav-btn').length === 5);
+  CC.gotoTab('friends');
+  check('tab nav routes to the Friends view', !$('view-friends').classList.contains('hidden'));
+  CC.gotoTab('messages');
+  check('tab nav routes to the Messages view', !$('view-messages').classList.contains('hidden'));
+  CC.gotoTab('home');
+  check('tab nav routes home', !$('view-home').classList.contains('hidden'));
+
   console.log(fails === 0 ? '\nSMOKE TEST PASSED' : `\n${fails} FAILURES`);
   process.exit(fails ? 1 : 0);
 })().catch(e => { console.error('CRASH:', e); process.exit(1); });

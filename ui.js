@@ -26,20 +26,73 @@ const S = {
   statsRecorded:{}
 };
 
+const ALL_VIEWS=['home','game','online','map','friends','messages'];
 function show(view){
   S.view = view;
-  for (const v of ['home','game','online','map']) $('view-'+v).classList.toggle('hidden', v!==view);
+  for (const v of ALL_VIEWS){ const el=$('view-'+v); if(el) el.classList.toggle('hidden', v!==view); }
   $('btn-quit').classList.toggle('hidden', view!=='game');
+  const navTabs={home:'home',friends:'friends',messages:'messages',map:'conquest'};
+  const nav=$('botnav');
+  const inGame = view==='game' || (view==='online' && S.code);
+  if(nav){ nav.classList.toggle('show', !inGame);
+    for(const b of nav.querySelectorAll('.botnav-btn'))
+      b.classList.toggle('active', b.dataset.tab===(navTabs[view]||(view==='online'?'home':'')));
+  }
   window.scrollTo(0,0);
+}
+function gotoTab(tab){
+  if(tab==='home') show('home');
+  else if(tab==='conquest'){ if(S.uid && S.profile && S.profile.provider!=='guest') openMap(); else openOnline(); }
+  else if(tab==='friends'){ renderFriendsTab(); show('friends'); }
+  else if(tab==='messages'){ renderMessages(); show('messages'); }
+  else if(tab==='profile'){ if(S.uid) openProfile(null); else openOnline(); }
+}
+function renderFriendsTab(){
+  const guest = !S.uid || (S.profile && S.profile.provider==='guest');
+  const a=$('tab-friends-auth'), w=$('tab-friends-wrap');
+  if(a) a.classList.toggle('hidden', !guest);
+  if(w) w.classList.toggle('hidden', guest);
+  if(!guest) renderFriends();
+}
+function renderMessages(){
+  const box=$('msg-list'); if(!box) return;
+  const ch=Object.entries(S.challenges||{}).filter(([,c])=>c && Date.now()-(c.createdAt||0)<3600000);
+  if(ch.length===0){ box.innerHTML='<div class="pub-empty">No messages yet. Challenges from friends arrive here.</div>'; updateBadges(); return; }
+  box.innerHTML=ch.map(([id,c])=>`<div class="pub-item"><div class="who">⚔ ${esc(c.fromName)} challenged you<span class="age">a private table is waiting</span></div>
+    <div class="frow"><button class="btn btn-primary mini" data-acc="${id}">Play</button><button class="btn btn-ghost mini" data-dec="${id}">Dismiss</button></div></div>`).join('');
+  for(const b of box.querySelectorAll('[data-acc]')) b.addEventListener('click',()=>{ const c=S.challenges[b.dataset.acc]; if(c){ S.pendingChallenge={id:b.dataset.acc,...c}; acceptChallenge(); } });
+  for(const b of box.querySelectorAll('[data-dec]')) b.addEventListener('click',()=>{ if(fdb) fdb.ref('users/'+S.uid+'/challenges/'+b.dataset.dec).remove().catch(()=>{}); });
+  updateBadges();
+}
+function updateBadges(){
+  const online=Object.keys(S.friends||{}).filter(u=>S.friendInfo[u]&&S.friendInfo[u].online).length;
+  const fb=$('bn-friends-badge'); if(fb){ fb.textContent=online; fb.classList.toggle('hidden', online===0); }
+  const msgs=Object.values(S.challenges||{}).filter(c=>c && Date.now()-(c.createdAt||0)<3600000).length;
+  const mb=$('bn-msg-badge'); if(mb){ mb.textContent=msgs; mb.classList.toggle('hidden', msgs===0); }
 }
 
 /* ---------- shared renderers ---------- */
+const CARD_DESIGNS=[
+  {id:'classic',  name:'Classic Cream',          need:()=>true},
+  {id:'jade',     name:'Jade Garden',            need:(l,s)=>l>=2,  needText:'player level 2'},
+  {id:'lacquer',  name:'Red Lacquer Imperial',   need:(l,s)=>l>=4,  needText:'player level 4'},
+  {id:'bamboo',   name:'Bamboo Minimalist',      need:(l,s)=>s>=15, needText:'15 Conquest stars'},
+  {id:'porcelain',name:'Porcelain Blue & White', need:(l,s)=>s>=40, needText:'40 Conquest stars'},
+  {id:'dragon',   name:'Gold Dragon Ornate',     need:(l,s)=>l>=10, needText:'player level 10'},
+  {id:'night',    name:'Dark Night Tournament',  need:(l,s)=>s>=90, needText:'90 Conquest stars'},
+];
+const cardDesignById=(id)=>CARD_DESIGNS.find(d=>d.id===id)||CARD_DESIGNS[0];
+function cardDesignUnlocked(d,prof){ const l=levelFromXp((prof||S.profile||{}).xp).level;
+  const s=totalStars((prof&&prof.campaign)||S.campaign); return d.need(l,s); }
+const activeCardDesign=()=>(S.profile&&S.profile.cardDesign)||'classic';
+
 function cardHTML(card, size, faceDown, animate, glow){
   const g = glow ? ' glow' : '';
-  if (faceDown || !card) return `<div class="card ${size} back ${animate?'deal-in':''}${g}"></div>`;
+  const dz = ' dz-'+activeCardDesign();
+  if (faceDown || !card) return `<div class="card ${size} back ${animate?'deal-in':''}${g}${dz}"></div>`;
   const red = card.suit==='H'||card.suit==='D';
   const txt = E.rankLabel(card.rank)+E.SUIT_GLYPHS[card.suit];
-  return `<div class="card ${size} ${red?'red':'black'} ${animate?'deal-in':''}${g}">
+  return `<div class="card ${size} ${red?'red':'black'} ${animate?'deal-in':''}${g}${dz}">
     <span class="corner">${txt}</span><span class="pip">${txt}</span></div>`;
 }
 /** lanes: [{name,total}]. one lane for solo, two for vs modes. */
@@ -985,11 +1038,12 @@ function removeFriend(fuid){
   fdb.ref('users/'+S.uid+'/friends/'+fuid).remove().catch(()=>{});
   fdb.ref('users/'+fuid+'/friends/'+S.uid).remove().catch(()=>{});
 }
-function friendError(msg){ const e=$('friend-err'); if(e){ e.textContent=msg; e.classList.remove('hidden'); } }
+function friendError(msg){ for(const id of ['friend-err','friend-err2']){ const e=$(id); if(e){ e.textContent=msg; e.classList.remove('hidden'); } } }
 
-function renderFriends(){
-  const box=$('o-friends-list'); if(!box) return;
-  const mine=$('my-friend-code'); if(mine&&S.profile) mine.textContent=S.profile.friendCode;
+function renderFriends(){ renderFriendsInto('o-friends-list','my-friend-code'); renderFriendsInto('o-friends-list2','my-friend-code2'); updateBadges(); }
+function renderFriendsInto(boxId, codeId){
+  const box=$(boxId); if(!box) return;
+  const mine=$(codeId); if(mine&&S.profile) mine.textContent=S.profile.friendCode;
   const fuids=Object.keys(S.friends||{});
   if(fuids.length===0){ box.innerHTML='<div class="pub-empty">No friends yet. swap codes to add one.</div>'; return; }
   box.innerHTML=fuids.map((fuid)=>{
@@ -1019,6 +1073,8 @@ async function sendChallenge(fuid){
   }catch(e){ friendError(e.message); }
 }
 function maybeShowChallenge(){
+  updateBadges();
+  if(S.view==='messages') renderMessages();
   if(S.code) return; // already at a table
   const entries=Object.entries(S.challenges||{})
     .filter(([,c])=>c && Date.now()-(c.createdAt||0) < 60*60*1000)
@@ -1101,6 +1157,20 @@ async function openProfile(uid){
   } else {
     pick.classList.add('hidden'); pick.innerHTML='';
   }
+  const cd=$('dp-cards');
+  if (cd && self && prof.provider!=='guest'){
+    cd.classList.remove('hidden');
+    cd.innerHTML='<div class="sl" style="margin:14px 0 6px">CARD DESIGN</div><div class="cd-grid">'+CARD_DESIGNS.map(d=>{
+      const open=cardDesignUnlocked(d,prof), sel=activeCardDesign()===d.id;
+      return `<button class="cd-swatch dz-${d.id} ${sel?'sel':''} ${open?'':'lockd'}" data-cd="${d.id}"
+        title="${d.name}${open?'':' \u2013 unlocks at '+d.needText}" ${open?'':'disabled'}>
+        <span class="cd-mini"><span class="cd-pip">A\u2660</span></span>
+        <span class="cd-name">${d.name}${open?'':' \ud83d\udd12'}</span></button>`;
+    }).join('')+'</div>';
+    for(const b of cd.querySelectorAll('[data-cd]:not([disabled])'))
+      b.addEventListener('click',()=>{ S.profile.cardDesign=b.dataset.cd;
+        if(fdb) fdb.ref('users/'+S.uid+'/cardDesign').set(b.dataset.cd).catch(()=>{}); openProfile(null); });
+  } else if(cd){ cd.classList.add('hidden'); cd.innerHTML=''; }
   $('dp-extra').innerHTML= self
     ? (gameCodes.length?`<div class="dp-games">Active tables: ${gameCodes.map((c)=>`<button class="btn btn-ghost mini" data-rejoin="${c}">${c}</button>`).join(' ')}</div>`:'')
       +`<div class="join-row" style="margin-top:12px"><input type="text" id="dp-rename" maxlength="16" placeholder="change display name"><button class="btn btn-ghost" id="dp-rename-go">rename</button></div>`
@@ -1640,7 +1710,9 @@ $('dcr-retry').addEventListener('click',()=>{ $('d-chal').close(); startLevel();
 $('dcr-next').addEventListener('click',()=>{ $('d-chal').close();
   const nxt=LEVELS.find((x)=>x.id===(S.lastClearedLevel||0)+1);
   if(nxt){ S.pendingLevel=nxt; startLevel(); } else openMap(); });
-window.__cc={ get S(){return S;}, LEVELS, challengeWin, challengeFail, refreshLives, renderMap, openLevel, openMap, levelFromXp, totalStars };
+for(const b of document.querySelectorAll('.botnav-btn')) b.addEventListener('click',()=>gotoTab(b.dataset.tab));
+{ const fa=$('friend-add2'); if(fa) fa.addEventListener('click',()=>addFriendByCode($('friend-code2').value)); }
+window.__cc={ get S(){return S;}, LEVELS, challengeWin, challengeFail, refreshLives, renderMap, openLevel, openMap, levelFromXp, totalStars, gotoTab, CARD_DESIGNS, updateBadges };
 $('tile-ai').addEventListener('click',(e)=>{ if(e.target.closest('.pill')) return; startMatch('ai'); });
 $('tile-pass').addEventListener('click',()=>startMatch('pass'));
 for (const p of document.querySelectorAll('#diff-picker .pill')){
