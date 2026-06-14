@@ -115,8 +115,8 @@ The live move log that powers spectating and rejoin includes the active player's
 The interface is built to feel like a polished mobile game while remaining a single self-contained HTML file. The looks are reconstructed in CSS/SVG (not embedded screenshots) so they scale across screen sizes and wire to live game state:
 
 - Bottom tab bar (Home / Conquest / Friends / Messages / Profile) for primary navigation, with live badges for online friends and pending challenges.
-- Unlockable card-back designs (Classic, Jade Garden, Red Lacquer Imperial, Bamboo Minimalist, Porcelain Blue & White, Gold Dragon Ornate, Dark Night Tournament), unlocked by player level or Conquest stars and chosen from the profile dialog.
+- Unlockable card-back designs using real sliced artwork (Classic, Jade Garden, Red Lacquer Imperial, Bamboo Minimalist, Porcelain Blue & White, Gold Dragon Ornate, Dark Night Tournament), unlocked by player level or Conquest stars and chosen from a picker in the profile dialog. The six themed backs are sliced from the supplied transparent asset sheet and embedded as compressed WebP data URIs (~46KB total).
 - Ornate jade/lacquer/gold buttons and splash doors with depth and cloud-corner motifs.
 - The Conquest map uses a compressed embedded background image behind the node trail with a dark legibility scrim; nodes are styled as stone/jade tiles.
 
-The one raster asset embedded is the Conquest map backdrop (compressed JPEG data URI, ~107KB); everything else is pure CSS/SVG.
+Embedded raster assets are the Conquest map backdrop (~107KB JPEG) and the six card backs (~46KB total WebP); buttons, nav and UI chrome remain CSS/SVG so they scale. Friends management lives solely in the Friends tab (removed from the Find Table panel to avoid duplication).

@@ -236,19 +236,26 @@ const playOut = async (win) => {
   check('profile: shows all 11 stat tiles incl Conquest', A.document.querySelectorAll('#dp-stats .stat').length === 11);
   check('profile: level chip and xp from the match win', $a('dp-level').textContent.startsWith('Lv') && (store.users[aUid].xp || 0) >= 100);
   check('profile: banner picker with 10 banners, dragon locked', A.document.querySelectorAll('#dp-banners .banner-swatch').length === 10 && A.document.querySelector('[data-banner="dragon"]').disabled);
+  check('profile: card-design picker renders all 7 swatches', A.document.querySelectorAll('#dp-cards .cd-swatch').length === 7);
+  check('profile: a premium card design swatch is locked', A.document.querySelector('#dp-cards .cd-swatch.lockd') !== null);
+  A.document.querySelector('#dp-cards .cd-swatch:not(.lockd):not(.sel)') && A.document.querySelector('#dp-cards .cd-swatch:not(.lockd):not(.sel)').click();
+  await sleep(20);
+  check('profile: selecting an unlocked design updates the active design', A.__cc.S.profile.cardDesign !== undefined);
   check('profile: shows the friend code', $a('dp-sub').textContent.includes(aUser.friendCode));
   $a('dp-close').click();
 
-  // add friend by code
-  $a('friend-code').value = cUser.friendCode;
-  $a('friend-add').click();
+  // add friend by code (now lives in the Friends tab, not Find Table)
+  A.__cc.gotoTab('friends'); await sleep(30);
+  check('friends: Friends tab shows the add control', !A.document.getElementById('view-friends').classList.contains('hidden'));
+  $a('friend-code2').value = cUser.friendCode;
+  $a('friend-add2').click();
   await waitFor(() => store.users[aUid].friends && store.users[aUid].friends[cUid], 2000);
   check('friends: mutual add by code', !!store.users[cUid].friends[aUid]);
-  await waitFor(() => $a('o-friends-list').textContent.includes('Cara'), 2000);
-  check('friends: list shows Cara online', $a('o-friends-list').textContent.includes('online'));
+  await waitFor(() => $a('o-friends-list2').textContent.includes('Cara'), 2000);
+  check('friends: list shows Cara online', $a('o-friends-list2').textContent.includes('online'));
 
   // challenge: Anna → Cara
-  A.document.querySelector('#o-friends-list [data-chal]').click();
+  A.document.querySelector('#o-friends-list2 [data-chal]').click();
   await waitFor(() => $c('d-challenge').open, 2500);
   check('challenge: Cara receives the dialog', $c('dc-text').textContent.includes('Anna'));
   $c('dc-accept').click();
@@ -296,7 +303,9 @@ const playOut = async (win) => {
   await signIn(cG, 'Gus', false);
   const $g = (id) => G.document.getElementById(id);
   $g('hub-find').click(); await sleep(30);
-  check('guest: friends section hidden in Find Table', $g('lobby-friends').classList.contains('hidden'));
+  check('guest: Find Table no longer contains a friends section', $g('lobby-friends') === null);
+  G.__cc.gotoTab('friends'); await sleep(30);
+  check('guest: Friends tab prompts sign-in', !$g('tab-friends-auth').classList.contains('hidden'));
   $g('hub-conquest').click(); await sleep(30);
   check('guest: Conquest routed to the sign-in note, not the map', G.document.getElementById('view-map').classList.contains('hidden') && $g('o-conquest').textContent.includes('Google'));
 

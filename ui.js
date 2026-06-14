@@ -520,7 +520,6 @@ function renderConquestPanel(){
 }
 function renderLobbyGates(){
   const guest = S.profile && S.profile.provider==='guest';
-  const fr=$('lobby-friends'); if(fr) fr.classList.toggle('hidden', !S.uid || guest);
   const sub=$('hub-conquest-sub');
   if (sub){
     sub.textContent = guest ? 'Sign in with Google to climb the campaign.'
@@ -1031,7 +1030,7 @@ async function addFriendByCode(codeRaw){
     const fname=fsnap.val().name||'Player';
     await fdb.ref('users/'+S.uid+'/friends/'+fuid).set({name:fname});
     await fdb.ref('users/'+fuid+'/friends/'+S.uid).set({name:S.profile.name});
-    $('friend-code').value='';
+    for(const id of ['friend-code','friend-code2']){ const el=$(id); if(el) el.value=''; }
   }catch(e){ friendError(e.message); }
 }
 function removeFriend(fuid){
@@ -1040,7 +1039,7 @@ function removeFriend(fuid){
 }
 function friendError(msg){ for(const id of ['friend-err','friend-err2']){ const e=$(id); if(e){ e.textContent=msg; e.classList.remove('hidden'); } } }
 
-function renderFriends(){ renderFriendsInto('o-friends-list','my-friend-code'); renderFriendsInto('o-friends-list2','my-friend-code2'); updateBadges(); }
+function renderFriends(){ renderFriendsInto('o-friends-list2','my-friend-code2'); updateBadges(); }
 function renderFriendsInto(boxId, codeId){
   const box=$(boxId); if(!box) return;
   const mine=$(codeId); if(mine&&S.profile) mine.textContent=S.profile.friendCode;
@@ -1752,7 +1751,6 @@ $('auth-back').addEventListener('click',()=>show('home'));
 $('dp-close').addEventListener('click',()=>$('d-profile').close());
 $('dc-accept').addEventListener('click',acceptChallenge);
 $('dc-decline').addEventListener('click',declineChallenge);
-$('friend-add').addEventListener('click',()=>addFriendByCode($('friend-code').value));
 $('o-create').addEventListener('click',oCreate);
 $('o-join').addEventListener('click',()=>joinByCode($('o-code').value.trim().toUpperCase()));
 $('o-back').addEventListener('click',()=>show('home'));
