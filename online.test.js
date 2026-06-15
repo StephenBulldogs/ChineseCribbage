@@ -237,6 +237,10 @@ const playOut = async (win) => {
   check('profile: level chip and xp from the match win', $a('dp-level').textContent.startsWith('Lv') && (store.users[aUid].xp || 0) >= 100);
   check('profile: banner picker with 10 banners, dragon locked', A.document.querySelectorAll('#dp-banners .banner-swatch').length === 10 && A.document.querySelector('[data-banner="dragon"]').disabled);
   check('profile: card-design picker renders all 7 swatches', A.document.querySelectorAll('#dp-cards .cd-swatch').length === 7);
+  check('profile: deck (faces) picker renders all 4 options', A.document.querySelectorAll('#dp-decks .fd-swatch').length === 4);
+  check('profile: a premium deck is locked', A.document.querySelector('#dp-decks .fd-swatch.lockd') !== null);
+  check('profile: face-deck catalogue exposed', Array.isArray(A.__cc.FACE_DECK_DESIGNS) && A.__cc.FACE_DECK_DESIGNS.length === 4);
+  check('engine: FACE_DECKS has 52 faces per theme', A.FACE_DECKS && Object.keys(A.FACE_DECKS.imperial).length === 52 && typeof A.FACE_DECKS.imperial.SA === 'string' && A.FACE_DECKS.imperial.SA.startsWith('data:image/webp'));
   check('profile: a premium card design swatch is locked', A.document.querySelector('#dp-cards .cd-swatch.lockd') !== null);
   A.document.querySelector('#dp-cards .cd-swatch:not(.lockd):not(.sel)') && A.document.querySelector('#dp-cards .cd-swatch:not(.lockd):not(.sel)').click();
   await sleep(20);

@@ -86,11 +86,33 @@ function cardDesignUnlocked(d,prof){ const l=levelFromXp((prof||S.profile||{}).x
   const s=totalStars((prof&&prof.campaign)||S.campaign); return d.need(l,s); }
 const activeCardDesign=()=>(S.profile&&S.profile.cardDesign)||'classic';
 
+// Full illustrated card-FACE decks (distinct from the card backs above).
+// Art lives in FACE_DECKS (theme -> { 'SA','S2',...,'CK' } -> data URI).
+const FACE_DECK_DESIGNS=[
+  {id:'none',        name:'Standard Faces',      need:()=>true},
+  {id:'imperial',    name:'Imperial Ink',        need:(l,s)=>l>=3,             needText:'player level 3'},
+  {id:'dragonbrush', name:'Dragon Brush',        need:(l,s)=>s>=25,            needText:'25 Conquest stars'},
+  {id:'jadeporc',    name:'Jade Porcelain',      need:(l,s)=>l>=8 && s>=50,    needText:'player level 8 + 50 stars'},
+];
+const faceDeckById=(id)=>FACE_DECK_DESIGNS.find(d=>d.id===id)||FACE_DECK_DESIGNS[0];
+function faceDeckUnlocked(d,prof){ const l=levelFromXp((prof||S.profile||{}).xp).level;
+  const s=totalStars((prof&&prof.campaign)||S.campaign); return d.need(l,s); }
+const activeFaceDeck=()=>(S.profile&&S.profile.faceDeck)||'none';
+function faceImg(card){
+  const fd=activeFaceDeck();
+  const FD=window.FACE_DECKS;
+  if(fd==='none' || !FD || !FD[fd]) return null;
+  const key=card.suit+E.rankLabel(card.rank);
+  return FD[fd][key]||null;
+}
+
 function cardHTML(card, size, faceDown, animate, glow){
   const g = glow ? ' glow' : '';
   const dz = ' dz-'+activeCardDesign();
   if (faceDown || !card) return `<div class="card ${size} back ${animate?'deal-in':''}${g}${dz}"></div>`;
   const red = card.suit==='H'||card.suit==='D';
+  const img = faceImg(card);
+  if (img) return `<div class="card ${size} facedeck ${animate?'deal-in':''}${g}" style="background-image:url(${img})"></div>`;
   const txt = E.rankLabel(card.rank)+E.SUIT_GLYPHS[card.suit];
   return `<div class="card ${size} ${red?'red':'black'} ${animate?'deal-in':''}${g}${dz}">
     <span class="corner">${txt}</span><span class="pip">${txt}</span></div>`;
@@ -1170,6 +1192,22 @@ async function openProfile(uid){
       b.addEventListener('click',()=>{ S.profile.cardDesign=b.dataset.cd;
         if(fdb) fdb.ref('users/'+S.uid+'/cardDesign').set(b.dataset.cd).catch(()=>{}); openProfile(null); });
   } else if(cd){ cd.classList.add('hidden'); cd.innerHTML=''; }
+  const fdp=$('dp-decks');
+  if (fdp && self && prof.provider!=='guest'){
+    fdp.classList.remove('hidden');
+    fdp.innerHTML='<div class="sl" style="margin:14px 0 6px">DECK (CARD FACES)</div><div class="cd-grid fd-grid">'+FACE_DECK_DESIGNS.map(d=>{
+      const open=faceDeckUnlocked(d,prof), sel=activeFaceDeck()===d.id;
+      const prev = d.id==='none' ? '' : (window.FACE_DECKS && window.FACE_DECKS[d.id] ? window.FACE_DECKS[d.id]['SA'] : '');
+      const mini = prev ? `style="background-image:url(${prev})"` : '';
+      return `<button class="cd-swatch fd-swatch ${sel?'sel':''} ${open?'':'lockd'}" data-fd="${d.id}"
+        title="${d.name}${open?'':' \\u2013 unlocks at '+d.needText}" ${open?'':'disabled'}>
+        <span class="cd-mini fd-mini" ${mini}>${prev?'':'A\\u2660'}</span>
+        <span class="cd-name">${d.name}${open?'':' \\ud83d\\udd12'}</span></button>`;
+    }).join('')+'</div>';
+    for(const b of fdp.querySelectorAll('[data-fd]:not([disabled])'))
+      b.addEventListener('click',()=>{ S.profile.faceDeck=b.dataset.fd;
+        if(fdb) fdb.ref('users/'+S.uid+'/faceDeck').set(b.dataset.fd).catch(()=>{}); openProfile(null); });
+  } else if(fdp){ fdp.classList.add('hidden'); fdp.innerHTML=''; }
   $('dp-extra').innerHTML= self
     ? (gameCodes.length?`<div class="dp-games">Active tables: ${gameCodes.map((c)=>`<button class="btn btn-ghost mini" data-rejoin="${c}">${c}</button>`).join(' ')}</div>`:'')
       +`<div class="join-row" style="margin-top:12px"><input type="text" id="dp-rename" maxlength="16" placeholder="change display name"><button class="btn btn-ghost" id="dp-rename-go">rename</button></div>`
@@ -1711,7 +1749,7 @@ $('dcr-next').addEventListener('click',()=>{ $('d-chal').close();
   if(nxt){ S.pendingLevel=nxt; startLevel(); } else openMap(); });
 for(const b of document.querySelectorAll('.botnav-btn')) b.addEventListener('click',()=>gotoTab(b.dataset.tab));
 { const fa=$('friend-add2'); if(fa) fa.addEventListener('click',()=>addFriendByCode($('friend-code2').value)); }
-window.__cc={ get S(){return S;}, LEVELS, challengeWin, challengeFail, refreshLives, renderMap, openLevel, openMap, levelFromXp, totalStars, gotoTab, CARD_DESIGNS, updateBadges };
+window.__cc={ get S(){return S;}, LEVELS, challengeWin, challengeFail, refreshLives, renderMap, openLevel, openMap, levelFromXp, totalStars, gotoTab, CARD_DESIGNS, FACE_DECK_DESIGNS, updateBadges };
 $('tile-ai').addEventListener('click',(e)=>{ if(e.target.closest('.pill')) return; startMatch('ai'); });
 $('tile-pass').addEventListener('click',()=>startMatch('pass'));
 for (const p of document.querySelectorAll('#diff-picker .pill')){

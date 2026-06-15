@@ -120,3 +120,13 @@ The interface is built to feel like a polished mobile game while remaining a sin
 - The Conquest map uses a compressed embedded background image behind the node trail with a dark legibility scrim; nodes are styled as stone/jade tiles.
 
 Embedded raster assets are the Conquest map backdrop (~107KB JPEG) and the six card backs (~46KB total WebP); buttons, nav and UI chrome remain CSS/SVG so they scale. Friends management lives solely in the Friends tab (removed from the Find Table panel to avoid duplication).
+
+## Card-face decks
+
+Separate from the card *backs*, players can unlock full illustrated **deck face** themes that replace every card front with custom artwork (illustrated pips, dragon aces, and painted court cards):
+
+- Imperial Ink (unlocks at player level 3)
+- Dragon Brush (unlocks at 25 Conquest stars)
+- Jade Porcelain (unlocks at player level 8 and 50 Conquest stars)
+
+The three themes were sliced from the supplied deck sheets into 156 individual card faces (52 per theme), compressed to WebP, and embedded as data URIs in a dedicated script block (window.FACE_DECKS). The active deck is chosen from a picker in the profile and persists per account. Selecting "Standard Faces" returns to the lightweight text/pip rendering.
