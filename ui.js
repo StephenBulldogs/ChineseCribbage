@@ -482,9 +482,7 @@ function renderMap(){
     return `<button class="map-node ${cls} tile-${tile}" style="left:${p.x}%;top:${p.y}px"
         data-level="${lv.id}" ${unlocked ? '' : 'disabled'} aria-label="Level ${lv.id}: ${lv.name}">
       ${isNext?'<span class="ping"></span>':''}
-      <span class="ic">${unlocked ? (done?NODE_TYPE_ICON[lv.type]:lv.id) : ''}</span>
       ${done?`<span class="stars">${'★'.repeat(stars)}<span class="se">${'★'.repeat(3-stars)}</span></span>`:''}
-      ${unlocked&&!done&&!milestone?`<span class="lnum">${lv.id}</span>`:''}
     </button>`;
   }).join('');
   wrap.innerHTML = html;

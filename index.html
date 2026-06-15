@@ -382,13 +382,11 @@
   .map-node.tile-reward::before{background-image:var(--tile-reward)}
   .map-node.tile-mystery::before{background-image:var(--tile-mystery)}
   .map-node.tile-chest::before{background-image:var(--tile-chest)}
-  .map-node[class*="tile-"] .ic{position:relative;z-index:2;font-size:18px;color:#2b1d0d;
-    text-shadow:0 1px 0 #fff8;margin-top:-6px}
-  .map-node[class*="tile-"].open .ic,.map-node[class*="tile-"].locked .ic{color:#2b1d0d}
-  .map-node[class*="tile-"] .lnum{position:relative;z-index:2;font-size:13px;font-weight:800;
-    color:#2b1d0d;text-shadow:0 1px 0 #fff9;margin-top:-30px}
-  .map-node[class*="tile-"] .stars{position:relative;z-index:2;margin-top:0;
-    text-shadow:0 1px 2px rgba(0,0,0,.6)}
+  .map-node[class*="tile-"] .stars{position:absolute;z-index:3;top:-14px;left:50%;
+    transform:translateX(-50%);white-space:nowrap;font-size:14px;color:var(--brass);
+    letter-spacing:1px;text-shadow:0 1px 2px rgba(0,0,0,.75),0 0 5px rgba(0,0,0,.5);
+    padding:1px 6px;border-radius:999px;background:rgba(20,11,9,.55)}
+  .map-node[class*="tile-"] .stars .se{color:#ffffff33}
   .map-node[class*="tile-"].locked{opacity:1;filter:none}
   .map-node[class*="tile-"].open:hover,.map-node[class*="tile-"]:not([disabled]):hover{transform:translate(-50%,-50%) scale(1.08)}
   .map-node.tile-dragon{width:96px;height:96px}
@@ -1648,9 +1646,7 @@ function renderMap(){
     return `<button class="map-node ${cls} tile-${tile}" style="left:${p.x}%;top:${p.y}px"
         data-level="${lv.id}" ${unlocked ? '' : 'disabled'} aria-label="Level ${lv.id}: ${lv.name}">
       ${isNext?'<span class="ping"></span>':''}
-      <span class="ic">${unlocked ? (done?NODE_TYPE_ICON[lv.type]:lv.id) : ''}</span>
       ${done?`<span class="stars">${'★'.repeat(stars)}<span class="se">${'★'.repeat(3-stars)}</span></span>`:''}
-      ${unlocked&&!done&&!milestone?`<span class="lnum">${lv.id}</span>`:''}
     </button>`;
   }).join('');
   wrap.innerHTML = html;
