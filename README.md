@@ -130,3 +130,7 @@ Separate from the card *backs*, players can unlock full illustrated **deck face*
 - Jade Porcelain (unlocks at player level 8 and 50 Conquest stars)
 
 The three themes were sliced from the supplied deck sheets into 156 individual card faces (52 per theme), compressed to WebP, and embedded as data URIs in a dedicated script block (window.FACE_DECKS). The active deck is chosen from a picker in the profile and persists per account. Selecting "Standard Faces" returns to the lightweight text/pip rendering.
+
+## Conquest map tiles
+
+The Conquest level nodes use sliced isometric tile artwork instead of plain circles. Eight node tiles were cut from the supplied transparent tile sheet (the gray checkerboard was flood-filled to real transparency), compressed to WebP (~77KB total), and embedded as CSS variables. Each node picks its tile by state and type: locked levels show a chained stone tile, cleared levels a cloud-marked tile, AI duels a crossed-swords tile, best-round challenges a reward tile, milestone levels (every 10th) a gold dragon tile, and standard levels a blank stone platform. The decorative scenery tiles (temple, bridge, gate, shrine, bamboo spring) were sliced too but are not yet placed on the map.

@@ -470,12 +470,21 @@ function renderMap(){
     const done = stars > 0;
     const isNext = lv.id === c.level && !done;
     const cls = unlocked ? (done ? 'done' : (isNext?'open next':'open')) : 'locked';
-    return `<button class="map-node ${cls}" style="left:${p.x}%;top:${p.y}px"
+    // pick a tile artwork for this node
+    const milestone = lv.id % 10 === 0;
+    let tile;
+    if (!unlocked) tile = 'locked';
+    else if (done) tile = 'cloud';
+    else if (milestone) tile = 'dragon';
+    else if (lv.type === 'ai') tile = 'battle';
+    else if (lv.type === 'bestRound') tile = 'reward';
+    else tile = 'blank';
+    return `<button class="map-node ${cls} tile-${tile}" style="left:${p.x}%;top:${p.y}px"
         data-level="${lv.id}" ${unlocked ? '' : 'disabled'} aria-label="Level ${lv.id}: ${lv.name}">
       ${isNext?'<span class="ping"></span>':''}
-      <span class="ic">${unlocked ? (done?NODE_TYPE_ICON[lv.type]:lv.id) : '🔒'}</span>
+      <span class="ic">${unlocked ? (done?NODE_TYPE_ICON[lv.type]:lv.id) : ''}</span>
       ${done?`<span class="stars">${'★'.repeat(stars)}<span class="se">${'★'.repeat(3-stars)}</span></span>`:''}
-      ${unlocked&&!done?`<span class="lnum">${lv.id}</span>`:''}
+      ${unlocked&&!done&&!milestone?`<span class="lnum">${lv.id}</span>`:''}
     </button>`;
   }).join('');
   wrap.innerHTML = html;

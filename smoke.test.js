@@ -260,6 +260,8 @@ function CC_makeRows(E){
   // run out of hearts: play locks behind the regrowth timer
   CC.S.campaign.lives = 0; CC.S.campaign.lastLifeAt = Date.now();
   CC.renderMap();
+  check('map: nodes render as artwork tiles', doc.querySelectorAll('.map-node[class*="tile-"]').length === doc.querySelectorAll('.map-node').length && doc.querySelectorAll('.map-node').length > 0);
+  check('map: locked nodes use the locked tile', doc.querySelector('.map-node.locked.tile-locked') !== null);
   doc.querySelector('.map-node[data-level="2"]').click();
   check('map: no lives means no play', $('dl-play').disabled);
   $('dl-close').click();
