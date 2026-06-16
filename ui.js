@@ -442,27 +442,70 @@ function loadCampaign(stored){
 }
 
 /* ---------- the map ---------- */
-const NODE_X = [20, 38, 62, 80, 62, 38];
+const NODE_X = [22, 40, 62, 78, 60, 38];
 const NODE_TYPE_ICON = { solo:'🎯', bestRound:'💎', ai:'⚔' };
+// Each block of 10 levels is a "zone" with its own terrain look.
+const MAP_ZONES = [
+  { name:'Bamboo Vale',     terrain:'z-bamboo'  },
+  { name:'Jade Cliffs',     terrain:'z-jade'    },
+  { name:'Lantern Town',    terrain:'z-lantern' },
+  { name:'Misty Range',     terrain:'z-mist'    },
+  { name:'Autumn Maples',   terrain:'z-autumn'  },
+  { name:'Lotus Waters',    terrain:'z-lotus'   },
+  { name:'Stone Pass',      terrain:'z-stone'   },
+  { name:'Snow Peaks',      terrain:'z-snow'    },
+  { name:'Imperial Road',   terrain:'z-imperial'},
+  { name:'Dragon Summit',   terrain:'z-dragon'  },
+];
+const zoneOf = (id) => MAP_ZONES[Math.floor((id-1)/10) % MAP_ZONES.length];
 function renderMap(){
   refreshLives();
   const c = S.campaign;
   const wrap = $('map-path'); if (!wrap) return;
-  const GAP = 92;
-  const H = LEVELS.length * GAP + 120;
+  const GAP = 96;
+  const TOP = 70;
+  const H = LEVELS.length * GAP + 140;
   wrap.style.height = H + 'px';
-  const pts = LEVELS.map((lv, i) => ({ x: NODE_X[i % NODE_X.length], y: 70 + i * GAP }));
-  // smooth gold trail through all nodes
-  const path = pts.map((p,i)=>`${i?'L':'M'}${p.x},${(p.y/H)*1000}`).join(' ');
-  const doneY = (() => { // glow the trail up to the furthest unlocked node
-    const idx = Math.min(c.level, LEVELS.length) - 1;
-    return ((pts[idx]?pts[idx].y:70)/H)*1000;
-  })();
+  const pts = LEVELS.map((lv, i) => ({ x: NODE_X[i % NODE_X.length], y: TOP + i * GAP }));
+  // build a smooth winding road through the nodes (quadratic curve segments)
+  const toY = (y) => (y / H) * 1000;
+  let d = `M${pts[0].x},${toY(pts[0].y)}`;
+  for (let i = 1; i < pts.length; i++){
+    const prev = pts[i-1], cur = pts[i];
+    const my = (toY(prev.y) + toY(cur.y)) / 2;
+    d += ` Q${prev.x},${my} ${(prev.x+cur.x)/2},${my} T${cur.x},${toY(cur.y)}`;
+  }
+  const idx = Math.min(c.level, LEVELS.length) - 1;
+  const doneY = toY(pts[idx] ? pts[idx].y : TOP);
+  // zone bands behind the road
+  let bands = '';
+  for (let z = 0; z * 10 < LEVELS.length; z++){
+    const first = z * 10, last = Math.min(first + 9, LEVELS.length - 1);
+    const y0 = toY(pts[first].y - GAP/2);
+    const y1 = toY(pts[last].y + GAP/2);
+    const zone = MAP_ZONES[z % MAP_ZONES.length];
+    bands += `<rect class="zone-band ${zone.terrain}" x="0" y="${y0}" width="100" height="${y1-y0}" />`;
+  }
   let html = `<svg id="map-svg" viewBox="0 0 100 1000" preserveAspectRatio="none">
-    <path d="${path}" fill="none" stroke="#1F100E" stroke-width="6" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
-    <path d="${path}" fill="none" stroke="var(--brass-dim)" stroke-width="3" stroke-dasharray="5 5" vector-effect="non-scaling-stroke" opacity=".7"/>
-    <path d="${path}" fill="none" stroke="var(--brass)" stroke-width="3" stroke-linecap="round" vector-effect="non-scaling-stroke"
-      style="stroke-dasharray:1000;stroke-dashoffset:${1000-(doneY/1000)*1000};opacity:.9"/></svg>`;
+    <defs>
+      <linearGradient id="roadShade" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#7c6a48"/><stop offset=".5" stop-color="#d9c7a0"/><stop offset="1" stop-color="#7c6a48"/>
+      </linearGradient>
+    </defs>
+    ${bands}
+    <path d="${d}" fill="none" stroke="#3a2a18" stroke-width="13" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+    <path d="${d}" fill="none" stroke="url(#roadShade)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+    <path d="${d}" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="1.4" stroke-dasharray="3 7" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+    <path d="${d}" fill="none" stroke="var(--brass)" stroke-width="3" stroke-linecap="round" vector-effect="non-scaling-stroke"
+      style="stroke-dasharray:1000;stroke-dashoffset:${1000 - doneY};opacity:.85" pathLength="1000"/>
+  </svg>`;
+  // zone labels at the start of each band
+  for (let z = 0; z * 10 < LEVELS.length; z++){
+    const first = z * 10;
+    const zone = MAP_ZONES[z % MAP_ZONES.length];
+    const reached = LEVELS[first].id <= c.level + 9;
+    html += `<div class="zone-label ${reached?'':'locked'}" style="top:${pts[first].y - GAP/2 + 6}px">${zone.name}</div>`;
+  }
   html += LEVELS.map((lv, i) => {
     const p = pts[i];
     const stars = c.stars[lv.id] || 0;
@@ -1756,7 +1799,7 @@ $('dcr-next').addEventListener('click',()=>{ $('d-chal').close();
   if(nxt){ S.pendingLevel=nxt; startLevel(); } else openMap(); });
 for(const b of document.querySelectorAll('.botnav-btn')) b.addEventListener('click',()=>gotoTab(b.dataset.tab));
 { const fa=$('friend-add2'); if(fa) fa.addEventListener('click',()=>addFriendByCode($('friend-code2').value)); }
-window.__cc={ get S(){return S;}, LEVELS, challengeWin, challengeFail, refreshLives, renderMap, openLevel, openMap, levelFromXp, totalStars, gotoTab, CARD_DESIGNS, FACE_DECK_DESIGNS, updateBadges };
+window.__cc={ get S(){return S;}, LEVELS, challengeWin, challengeFail, refreshLives, renderMap, openLevel, openMap, levelFromXp, totalStars, gotoTab, CARD_DESIGNS, FACE_DECK_DESIGNS, MAP_ZONES, updateBadges };
 $('tile-ai').addEventListener('click',(e)=>{ if(e.target.closest('.pill')) return; startMatch('ai'); });
 $('tile-pass').addEventListener('click',()=>startMatch('pass'));
 for (const p of document.querySelectorAll('#diff-picker .pill')){

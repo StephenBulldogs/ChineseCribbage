@@ -134,3 +134,7 @@ The three themes were sliced from the supplied deck sheets into 156 individual c
 ## Conquest map tiles
 
 The Conquest level nodes use sliced isometric tile artwork instead of plain circles. Eight node tiles were cut from the supplied transparent tile sheet (the gray checkerboard was flood-filled to real transparency), compressed to WebP (~77KB total), and embedded as CSS variables. Each node picks its tile by state and type: locked levels show a chained stone tile, cleared levels a cloud-marked tile, AI duels a crossed-swords tile, best-round challenges a reward tile, milestone levels (every 10th) a gold dragon tile, and standard levels a blank stone platform. The decorative scenery tiles (temple, bridge, gate, shrine, bamboo spring) were sliced too but are not yet placed on the map.
+
+## Conquest map road and terrain zones
+
+The Conquest map now reads as a journey along a winding stone road. The level nodes sit on a curved road drawn with quadratic SVG segments (dark edge, stone fill, dashed centre line, and a gold progress overlay that fills as you advance). Every 10 levels the terrain changes into a named zone (Bamboo Vale, Jade Cliffs, Lantern Town, Misty Range, Autumn Maples, Lotus Waters, Stone Pass, Snow Peaks, Imperial Road, Dragon Summit), each rendered as a tinted band behind the road with its own label. Unreached zones are dimmed.

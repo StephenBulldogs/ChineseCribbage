@@ -262,6 +262,9 @@ function CC_makeRows(E){
   CC.renderMap();
   check('map: nodes render as artwork tiles', doc.querySelectorAll('.map-node[class*="tile-"]').length === doc.querySelectorAll('.map-node').length && doc.querySelectorAll('.map-node').length > 0);
   check('map: locked nodes use the locked tile', doc.querySelector('.map-node.locked.tile-locked') !== null);
+  check('map: terrain zones banded every 10 levels', doc.querySelectorAll('.zone-band').length === Math.ceil(CC.LEVELS.length/10));
+  check('map: each zone has a named label', doc.querySelectorAll('.zone-label').length === doc.querySelectorAll('.zone-band').length);
+  check('map: a winding road is drawn (curve segments)', /Q/.test(doc.querySelector('#map-svg path:last-of-type').getAttribute('d') || doc.querySelectorAll('#map-svg path')[1].getAttribute('d')));
   doc.querySelector('.map-node[data-level="2"]').click();
   check('map: no lives means no play', $('dl-play').disabled);
   $('dl-close').click();
