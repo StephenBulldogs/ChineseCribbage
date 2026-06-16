@@ -681,7 +681,7 @@
       <button class="btn btn-ghost" id="o-cancel" style="width:100%">Cancel</button>
     </div>
     <div id="o-game" class="hidden">
-      <div class="board-head"><h2 id="o-round">Round 1</h2><button class="btn btn-ghost" id="o-leave">Leave</button></div>
+      <div class="board-head"><h2 id="o-round">Round 1</h2><span style="display:flex;gap:8px"><button class="btn btn-ghost hidden" id="o-forfeit">Forfeit</button><button class="btn btn-ghost" id="o-leave">Leave</button></span></div>
       <div class="rail" id="o-rail"></div>
       <div class="roster" id="o-game-roster"></div>
       <div class="hist" id="o-history"></div>
@@ -1191,6 +1191,8 @@ const ROW_LABELS = ['Hand 1','Hand 2','Hand 3','Hand 4','Crib'];
 const AI_NAMES = { easy:'Deckhand', medium:'Navigator', hard:'Captain' };
 const LANE_COLORS = ['var(--brass)','var(--jade)','#B5703A','#7A86B8'];
 const TAKEOVER_MS = () => (typeof window.__takeoverMs === 'number' ? window.__takeoverMs : 120000);
+// Online tables auto-close after 72h of inactivity (overridable for tests).
+const EXPIRE_MS = () => (typeof window.__expireMs === 'number' ? window.__expireMs : 72*60*60*1000);
 
 const S = {
   view:'home', mode:'ai', difficulty:'medium',
@@ -2254,6 +2256,10 @@ function recordHand(rowScores, handTotal){
 function recordMatchEnd(room){
   if(!S.uid||S.seat<0||!S.code||S.statsRecorded[S.code]) return;
   S.statsRecorded[S.code]=true;
+  if(room.result==='closed'){ // neutral close: no winner, loser, or tie recorded
+    if(fdb) fdb.ref('users/'+S.uid+'/games/'+S.code).remove().catch(()=>{});
+    return;
+  }
   const rounds=Object.keys(room.rounds||{}).length;
   bumpStats((st)=>{
     st.gamesPlayed=(st.gamesPlayed||0)+1;
@@ -2566,9 +2572,15 @@ function renderSeatConfig(){
 function renderPublicRooms(){
   const box=$('o-public'); if(!box) return;
   const now=Date.now();
+  const expire=EXPIRE_MS();
   const entries=Object.entries(S.publicRooms||{})
-    .filter(([,v])=>v && now-(v.createdAt||0) < 24*60*60*1000)
-    .sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0));
+    .filter(([code,v])=>{
+      if(!v) return false;
+      const idle=now-(v.lastActive||v.createdAt||0);
+      if(idle>=expire){ if(fdb) fdb.ref('publicRooms/'+code).remove().catch(()=>{}); return false; }
+      return true;
+    })
+    .sort((a,b)=>(b[1].lastActive||b[1].createdAt||0)-(a[1].lastActive||a[1].createdAt||0));
   if (entries.length===0){ box.innerHTML='<div class="pub-empty">No open tables right now. open one above.</div>'; return; }
   box.innerHTML=entries.map(([code,v])=>{
     const mins=Math.max(0,Math.round((now-(v.createdAt||0))/60000));
@@ -2594,11 +2606,11 @@ async function createTable({size, seatCfg, visibility}){
       name:`${AI_SEAT_NAMES[cfg]} (AI ${idx+2})`, joined:true, ai:true, difficulty:cfg, connected:true };
   });
   await db.ref('rooms/'+code).set({
-    createdAt:Date.now(), size, players,
+    createdAt:Date.now(), lastActive:Date.now(), size, players,
     rounds:{}, currentRound:0, turn:0, totals,
     status:'waiting', visibility
   });
-  if (visibility==='public') await db.ref('publicRooms/'+code).set({host:S.myName,createdAt:Date.now(),size});
+  if (visibility==='public') await db.ref('publicRooms/'+code).set({host:S.myName,createdAt:Date.now(),lastActive:Date.now(),size});
   return code;
 }
 function enterRoomAsHost(code){
@@ -2738,17 +2750,55 @@ function bindClaims(container){
     c.addEventListener('click',()=>openProfile(c.dataset.uid));
 }
 
+/* Decide the result when a table closes without anyone reaching 29.
+   Unique leader → that seat wins. Otherwise (all tied, including 0/0) →
+   neutral close: 'closed' records no winner, loser, or tie. */
+function resolveByLead(room,size){
+  let best=-Infinity, bestSeat=0, bestCount=0;
+  for(let k=0;k<size;k++){
+    const t=(room.totals&&room.totals['t'+k])||0;
+    if(t>best){ best=t; bestSeat=k; bestCount=1; } else if(t===best) bestCount++;
+  }
+  return bestCount===1 ? 'p'+bestSeat : 'closed';
+}
+/* A seated player forfeits: the game ends and the win is awarded to the
+   leading opponent (forfeiting player is the loser). */
+function forfeitGame(){
+  const room=S.room;
+  if(!room || room.status!=='playing' || S.seat<0) return;
+  const size=room.size||2;
+  let best=-Infinity, winner=-1;
+  for(let k=0;k<size;k++){
+    if(k===S.seat) continue;
+    const t=(room.totals&&room.totals['t'+k])||0;
+    if(t>best){ best=t; winner=k; }
+  }
+  if(winner<0) winner=(S.seat+1)%size;
+  fdb.ref('rooms/'+S.code).update({status:'done', result:'p'+winner, forfeitedBy:S.seat, lastActive:Date.now()}).catch(()=>{});
+  fdb.ref('publicRooms/'+S.code).remove().catch(()=>{});
+}
+
 function onRoomUpdate(){
   const room=S.room;
   if(!room){ oShow('lobby'); return oError('The room was closed.'); }
   const size=room.size||2;
 
+  // Auto-close: a table idle for 72h resolves and shuts down.
+  if(room.status!=='done'){
+    const idle=Date.now()-(room.lastActive||room.createdAt||0);
+    if(idle>=EXPIRE_MS()){
+      fdb.ref('rooms/'+S.code).update({status:'done', result:resolveByLead(room,size), closedIdle:true, lastActive:Date.now()}).catch(()=>{});
+      fdb.ref('publicRooms/'+S.code).remove().catch(()=>{});
+      return;
+    }
+  }
+
   // Host: start the game once every seat is filled.
   if(S.seat===0 && room.status==='waiting'){
     const full=seatKeys(room).every((pk)=>room.players&&room.players[pk]&&room.players[pk].joined);
     if(full){
-      fdb.ref('rooms/'+S.code).update({status:'playing'});
-      if(room.visibility==='public') fdb.ref('publicRooms/'+S.code).update({status:'playing'}).catch(()=>{});
+      fdb.ref('rooms/'+S.code).update({status:'playing', lastActive:Date.now()});
+      if(room.visibility==='public') fdb.ref('publicRooms/'+S.code).update({status:'playing', lastActive:Date.now()}).catch(()=>{});
       return;
     }
   }
@@ -2801,7 +2851,7 @@ function onRoomUpdate(){
         if(t>=E.TARGET) anyHome=true;
         if(t>best){ best=t; bestSeat=k; bestCount=1; } else if(t===best) bestCount++;
       }
-      const updates={ totals };
+      const updates={ totals, lastActive:Date.now() };
       if(anyHome){
         updates.status='done'; updates.result=bestCount>1?'tie':'p'+bestSeat;
         fdb.ref('publicRooms/'+S.code).remove().catch(()=>{});
@@ -2828,7 +2878,8 @@ function runRemoteAi(roundIndex, seat, difficulty, size){
       const net=E.scoreRound(r).net;
       fdb.ref('rooms/'+S.code).update({
         ['rounds/'+roundIndex+'/net'+seat]:net,
-        turn:(seat+1)%size
+        turn:(seat+1)%size,
+        lastActive:Date.now()
       }).catch(()=>{});
       return;
     }
@@ -2864,12 +2915,22 @@ function renderOnline(){
   $('o-game-roster').innerHTML=rosterHTML(room);
   bindClaims($('o-game-roster'));
   $('o-history').innerHTML=historyHTML(room);
+  const fbtn=$('o-forfeit');
+  if(fbtn) fbtn.classList.toggle('hidden', !(room.status==='playing' && S.seat>=0));
 
   if(room.status==='done'){
     recordMatchEnd(room);
-    const iWon=S.seat>=0 && room.result==='p'+S.seat;
-    $('do-title').textContent= room.result==='tie'?"It's a tie": iWon?'You win the table':`${seatName(room,+room.result.slice(1))} takes it`;
-    $('do-sub').textContent=lanes.map(l=>`${l.name.replace(' (you)','')} ${l.total}`).join(' · ');
+    if(room.result==='closed'){
+      $('do-title').textContent='Table closed';
+      $('do-sub').textContent='No result \u2014 the table sat idle too long.';
+    } else {
+      const iWon=S.seat>=0 && room.result==='p'+S.seat;
+      const note = room.forfeitedBy!==undefined
+        ? (room.forfeitedBy===S.seat ? ' \u00b7 you forfeited' : ` \u00b7 ${seatName(room,room.forfeitedBy)} forfeited`)
+        : '';
+      $('do-title').textContent= iWon?'You win the table':`${seatName(room,+room.result.slice(1))} takes it`;
+      $('do-sub').textContent=lanes.map(l=>`${l.name.replace(' (you)','')} ${l.total}`).join(' · ')+note;
+    }
     $('o-play').innerHTML=''; $('o-spectate').innerHTML=''; $('o-waiting').classList.add('hidden');
     if(!$('d-over').open) $('d-over').showModal();
     return;
@@ -2911,7 +2972,8 @@ function renderOnline(){
       const net=res.net;
       fdb.ref('rooms/'+S.code).update({
         ['rounds/'+room.currentRound+'/net'+S.seat]:net,
-        turn:(S.seat+1)%size
+        turn:(S.seat+1)%size,
+        lastActive:Date.now()
       });
     });
     return;
@@ -3028,6 +3090,9 @@ $('o-back').addEventListener('click',()=>show('home'));
 $('o-setup-back').addEventListener('click',()=>show('home'));
 $('o-cancel').addEventListener('click',leaveRoom);
 $('o-leave').addEventListener('click',leaveRoom);
+{ const fb=$('o-forfeit'); if(fb) fb.addEventListener('click',()=>{
+    if(confirm('Forfeit this game? Your opponent will be awarded the win.')) forfeitGame();
+  }); }
 
 // ----- settings panel -----
 function openSettings(){
