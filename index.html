@@ -1748,7 +1748,9 @@ function startMapTick(){
 /** Conquest is an online, account-bound mode. Guests are asked to sign in with Google. */
 function openMap(){
   if (!S.uid || !S.profile || S.profile.provider === 'guest'){
-    show('online'); oShow(S.uid ? 'lobby' : 'auth');
+    // openOnline preloads the auth SDK, so the Google button can open its
+    // popup within the tap gesture (required on iOS Safari).
+    openOnline();
     return;
   }
   show('map');
