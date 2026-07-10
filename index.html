@@ -2135,13 +2135,28 @@ function ensureAuthWatcher(){
   S.authWatched=true;
   firebase.auth().onAuthStateChanged(onAuth);
 }
+function friendlyAuthMessage(e){
+  const code=(e&&e.code)||'';
+  const msgs={
+    'auth/popup-blocked':'The browser blocked the sign-in window. Tap Continue with Google again, or allow pop-ups for this site in the browser settings.',
+    'auth/popup-closed-by-user':'The sign-in window closed before finishing. Please try again.',
+    'auth/cancelled-popup-request':'Another sign-in attempt was already open. Please try again.',
+    'auth/unauthorized-domain':'This web address is not on the Firebase authorized-domains list, so Google sign-in is refused here.',
+    'auth/network-request-failed':'Network error during sign-in. Check your connection and try again.'
+  };
+  return msgs[code]||(e&&e.message)||'Sign-in failed. Please try again.';
+}
 async function signInGoogle(){
+  const err=$('auth-err'); if(err) err.classList.add('hidden');
   try{
+    // On iPhone/iPad Safari the popup is only allowed while the tap gesture is
+    // still live, so these loads must already be warm (openOnline preloads
+    // them the moment the sign-in panel appears).
     await loadFirebase();
     await loadFirebaseAuth(); // the auth SDK is only needed for Google
     ensureAuthWatcher();
     await firebase.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider());
-  }catch(e){ authError(e.message); }
+  }catch(e){ authError(friendlyAuthMessage(e)); }
 }
 /** Guest: a plain local session. No auth provider, no password, nothing stored. */
 async function signInGuest(){
