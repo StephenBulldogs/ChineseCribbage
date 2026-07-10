@@ -179,11 +179,11 @@ function scoreRound(s) {
   return { rowScores, heels, handTotal, net: handTotal - PAR };
 }
 
-// --- Match: race to 29, equal rounds guaranteed, ties allowed ---
-function newMatch(firstPlayer = 0, seed) {
+// --- Match: race to 29, equal rounds guaranteed, ties allowed (2-4 seats) ---
+function newMatch(firstPlayer = 0, seed, players = 2) {
   return {
-    totals: [0, 0],
-    roundsPlayed: [0, 0],
+    totals: Array.from({ length: players }, () => 0),
+    roundsPlayed: Array.from({ length: players }, () => 0),
     turn: firstPlayer,
     roundSeed: seed == null ? randomSeed() : seed,
     outcome: { kind: 'playing' },
@@ -195,15 +195,15 @@ function applyRoundNet(m, net, nextSeed) {
   const roundsPlayed = m.roundsPlayed.slice();
   totals[m.turn] += net;
   roundsPlayed[m.turn] += 1;
-  const even = roundsPlayed[0] === roundsPlayed[1];
-  const home = totals[0] >= TARGET || totals[1] >= TARGET;
+  const even = roundsPlayed.every((n) => n === roundsPlayed[0]);
+  const home = totals.some((t) => t >= TARGET);
   let outcome = { kind: 'playing' };
   if (even && home) {
-    if (totals[0] > totals[1]) outcome = { kind: 'win', player: 0 };
-    else if (totals[1] > totals[0]) outcome = { kind: 'win', player: 1 };
-    else outcome = { kind: 'tie' };
+    const top = Math.max(...totals);
+    const leaders = totals.reduce((a, t, i) => (t === top ? a.concat(i) : a), []);
+    outcome = leaders.length === 1 ? { kind: 'win', player: leaders[0] } : { kind: 'tie' };
   }
-  return { totals, roundsPlayed, turn: m.turn === 0 ? 1 : 0, roundSeed: nextSeed == null ? randomSeed() : nextSeed, outcome };
+  return { totals, roundsPlayed, turn: (m.turn + 1) % totals.length, roundSeed: nextSeed == null ? randomSeed() : nextSeed, outcome };
 }
 
 // --- AI ---

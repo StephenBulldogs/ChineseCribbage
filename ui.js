@@ -13,6 +13,7 @@ const EXPIRE_MS = () => (typeof window.__expireMs === 'number' ? window.__expire
 
 const S = {
   view:'home', mode:'ai', difficulty:'medium',
+  passCount:2, passNames:['Player 1','Player 2','Player 3','Player 4'],
   players:[{name:'You',kind:'human'},{name:'Navigator',kind:'ai'}],
   match:null, round:null, lastResult:null, aiTimer:null,
   count:null, oCounted:-1,
@@ -750,15 +751,35 @@ function challengeFail(){
 /* ====================================================================
    LOCAL GAME (solo / vs AI / pass & play)
    ==================================================================== */
+/* Pass & play setup: pick 2-4 seats and name each one. Choices live in
+   S.passCount / S.passNames so a rematch reuses the same table. */
+function openPassSetup(){
+  renderPassNames();
+  $('d-pass').showModal();
+}
+function capturePassNames(){
+  for (const inp of document.querySelectorAll('#pp-names input')){
+    const i=+inp.dataset.seat;
+    S.passNames[i]=inp.value.trim().slice(0,16) || 'Player '+(i+1);
+  }
+}
+function renderPassNames(){
+  for (const p of document.querySelectorAll('#pp-size .pill'))
+    p.setAttribute('aria-pressed', String(+p.dataset.n===S.passCount));
+  $('pp-names').innerHTML = Array.from({length:S.passCount},(_,i)=>`
+    <div class="row"><span class="lbl">Seat ${i+1}</span>
+      <input type="text" maxlength="16" data-seat="${i}" value="${esc(S.passNames[i])}" aria-label="Player ${i+1} name"></div>`).join('');
+}
+
 function startMatch(mode){
   cancelCount();
   S.mode = mode;
   S.players = mode==='ai'
     ? [{name:'You',kind:'human'},{name:AI_NAMES[S.difficulty],kind:'ai'}]
     : mode==='pass'
-      ? [{name:'Player 1',kind:'human'},{name:'Player 2',kind:'human'}]
+      ? S.passNames.slice(0,S.passCount).map((n)=>({name:n,kind:'human'}))
       : [{name:'You',kind:'human'},{name:'-',kind:'human'}]; // solo
-  S.match = E.newMatch(0);
+  S.match = E.newMatch(0, undefined, S.players.length);
   S.round = E.newRound(S.match.roundSeed);
   S.lastResult = null;
   show('game');
@@ -925,7 +946,7 @@ function runConquestAiRound(seat){
 function showMatchOver(m){
   const o=m.outcome;
   $('do-title').textContent= o.kind==='tie' ? "It's a tie" : `${S.players[o.player].name} wins`;
-  $('do-sub').textContent=`${S.players[0].name} ${m.totals[0]} · ${S.players[1].name} ${m.totals[1]}`;
+  $('do-sub').textContent=m.totals.map((t,i)=>`${S.players[i].name} ${t}`).join(' · ');
   $('d-over').showModal();
 }
 
@@ -1879,16 +1900,23 @@ for(const b of document.querySelectorAll('.botnav-btn')) b.addEventListener('cli
 { const fa=$('friend-add2'); if(fa) fa.addEventListener('click',()=>addFriendByCode($('friend-code2').value)); }
 window.__cc={ get S(){return S;}, LEVELS, challengeWin, challengeFail, refreshLives, renderMap, openLevel, openMap, levelFromXp, totalStars, gotoTab, CARD_DESIGNS, FACE_DECK_DESIGNS, MAP_ZONES, updateBadges };
 $('tile-ai').addEventListener('click',(e)=>{ if(e.target.closest('.pill')) return; startMatch('ai'); });
-$('tile-pass').addEventListener('click',()=>startMatch('pass'));
+$('tile-pass').addEventListener('click',openPassSetup);
+$('pp-start').addEventListener('click',()=>{ capturePassNames(); $('d-pass').close(); startMatch('pass'); });
+$('pp-cancel').addEventListener('click',()=>$('d-pass').close());
+for (const p of document.querySelectorAll('#pp-size .pill')){
+  const pick=()=>{ capturePassNames(); S.passCount=+p.dataset.n; renderPassNames(); };
+  p.addEventListener('click',pick);
+  p.addEventListener('keydown',(e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); pick(); }});
+}
 for (const p of document.querySelectorAll('#diff-picker .pill')){
   const pick=()=>{ S.difficulty=p.dataset.d;
     document.querySelectorAll('#diff-picker .pill').forEach(x=>x.setAttribute('aria-pressed',String(x===p))); };
   p.addEventListener('click',(e)=>{ e.stopPropagation(); pick(); });
   p.addEventListener('keydown',(e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); e.stopPropagation(); pick(); }});
 }
-for (const p of document.querySelectorAll('.size-row .pill')){
+for (const p of document.querySelectorAll('#o-make .size-row .pill')){
   const pick=()=>{ S.roomSize=+p.dataset.n;
-    document.querySelectorAll('.size-row .pill').forEach(x=>x.setAttribute('aria-pressed',String(x===p)));
+    document.querySelectorAll('#o-make .size-row .pill').forEach(x=>x.setAttribute('aria-pressed',String(x===p)));
     renderSeatConfig(); };
   p.addEventListener('click',pick);
   p.addEventListener('keydown',(e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); pick(); }});
