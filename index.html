@@ -474,6 +474,12 @@
   .seat-cfg{margin-bottom:12px}
   .seat-cfg .row{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
   .seat-cfg .lbl{font-size:12px;color:var(--cream-dim);width:52px}
+  .pp-names{margin-bottom:14px}
+  .pp-names .row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .pp-names .lbl{font-size:12px;color:var(--cream-dim);width:52px;flex:none}
+  .pp-names input{flex:1;min-width:0}
+  #d-pass .btn{margin-top:0}
+  #d-pass .btn + .btn{margin-top:10px}
   .roster{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}
   .chip{display:inline-flex;align-items:center;gap:7px;background:rgba(28,14,12,.82);border:1px solid var(--lacquer-edge);
     border-radius:999px;padding:6px 12px;font-size:12px;color:var(--cream)}
@@ -552,7 +558,7 @@
       </button>
       <button class="tile" id="tile-pass">
         <h2>Pass &amp; play</h2>
-        <p>Two players, one screen.</p>
+        <p>Two to four players, one screen.</p>
         <span class="tag">PLAYS OFFLINE</span>
       </button>
     </div>
@@ -819,6 +825,19 @@
     <div class="d-sub" id="ds-sub"></div>
     <button class="btn btn-primary" id="ds-continue">Continue</button>
   </dialog>
+  <dialog id="d-pass">
+    <div class="d-eyebrow">Pass &amp; play</div>
+    <div class="field-label" style="margin-top:0">Players</div>
+    <div class="size-row" id="pp-size" role="group" aria-label="Number of players">
+      <span class="pill" role="button" tabindex="0" data-n="2" aria-pressed="true">2 players</span>
+      <span class="pill" role="button" tabindex="0" data-n="3" aria-pressed="false">3 players</span>
+      <span class="pill" role="button" tabindex="0" data-n="4" aria-pressed="false">4 players</span>
+    </div>
+    <div class="field-label">Names</div>
+    <div class="pp-names" id="pp-names"></div>
+    <button class="btn btn-primary" id="pp-start">Start match</button>
+    <button class="btn btn-ghost" id="pp-cancel">Cancel</button>
+  </dialog>
   <dialog id="d-handoff">
     <div class="d-eyebrow">Pass the device</div>
     <div class="d-big" id="dh-name"></div>
@@ -1016,11 +1035,11 @@ function scoreRound(s) {
   return { rowScores, heels, handTotal, net: handTotal - PAR };
 }
 
-// --- Match: race to 29, equal rounds guaranteed, ties allowed ---
-function newMatch(firstPlayer = 0, seed) {
+// --- Match: race to 29, equal rounds guaranteed, ties allowed (2-4 seats) ---
+function newMatch(firstPlayer = 0, seed, players = 2) {
   return {
-    totals: [0, 0],
-    roundsPlayed: [0, 0],
+    totals: Array.from({ length: players }, () => 0),
+    roundsPlayed: Array.from({ length: players }, () => 0),
     turn: firstPlayer,
     roundSeed: seed == null ? randomSeed() : seed,
     outcome: { kind: 'playing' },
@@ -1032,15 +1051,15 @@ function applyRoundNet(m, net, nextSeed) {
   const roundsPlayed = m.roundsPlayed.slice();
   totals[m.turn] += net;
   roundsPlayed[m.turn] += 1;
-  const even = roundsPlayed[0] === roundsPlayed[1];
-  const home = totals[0] >= TARGET || totals[1] >= TARGET;
+  const even = roundsPlayed.every((n) => n === roundsPlayed[0]);
+  const home = totals.some((t) => t >= TARGET);
   let outcome = { kind: 'playing' };
   if (even && home) {
-    if (totals[0] > totals[1]) outcome = { kind: 'win', player: 0 };
-    else if (totals[1] > totals[0]) outcome = { kind: 'win', player: 1 };
-    else outcome = { kind: 'tie' };
+    const top = Math.max(...totals);
+    const leaders = totals.reduce((a, t, i) => (t === top ? a.concat(i) : a), []);
+    outcome = leaders.length === 1 ? { kind: 'win', player: leaders[0] } : { kind: 'tie' };
   }
-  return { totals, roundsPlayed, turn: m.turn === 0 ? 1 : 0, roundSeed: nextSeed == null ? randomSeed() : nextSeed, outcome };
+  return { totals, roundsPlayed, turn: (m.turn + 1) % totals.length, roundSeed: nextSeed == null ? randomSeed() : nextSeed, outcome };
 }
 
 // --- AI ---
@@ -1196,6 +1215,7 @@ const EXPIRE_MS = () => (typeof window.__expireMs === 'number' ? window.__expire
 
 const S = {
   view:'home', mode:'ai', difficulty:'medium',
+  passCount:2, passNames:['Player 1','Player 2','Player 3','Player 4'],
   players:[{name:'You',kind:'human'},{name:'Navigator',kind:'ai'}],
   match:null, round:null, lastResult:null, aiTimer:null,
   count:null, oCounted:-1,
@@ -1933,15 +1953,35 @@ function challengeFail(){
 /* ====================================================================
    LOCAL GAME (solo / vs AI / pass & play)
    ==================================================================== */
+/* Pass & play setup: pick 2-4 seats and name each one. Choices live in
+   S.passCount / S.passNames so a rematch reuses the same table. */
+function openPassSetup(){
+  renderPassNames();
+  $('d-pass').showModal();
+}
+function capturePassNames(){
+  for (const inp of document.querySelectorAll('#pp-names input')){
+    const i=+inp.dataset.seat;
+    S.passNames[i]=inp.value.trim().slice(0,16) || 'Player '+(i+1);
+  }
+}
+function renderPassNames(){
+  for (const p of document.querySelectorAll('#pp-size .pill'))
+    p.setAttribute('aria-pressed', String(+p.dataset.n===S.passCount));
+  $('pp-names').innerHTML = Array.from({length:S.passCount},(_,i)=>`
+    <div class="row"><span class="lbl">Seat ${i+1}</span>
+      <input type="text" maxlength="16" data-seat="${i}" value="${esc(S.passNames[i])}" aria-label="Player ${i+1} name"></div>`).join('');
+}
+
 function startMatch(mode){
   cancelCount();
   S.mode = mode;
   S.players = mode==='ai'
     ? [{name:'You',kind:'human'},{name:AI_NAMES[S.difficulty],kind:'ai'}]
     : mode==='pass'
-      ? [{name:'Player 1',kind:'human'},{name:'Player 2',kind:'human'}]
+      ? S.passNames.slice(0,S.passCount).map((n)=>({name:n,kind:'human'}))
       : [{name:'You',kind:'human'},{name:'-',kind:'human'}]; // solo
-  S.match = E.newMatch(0);
+  S.match = E.newMatch(0, undefined, S.players.length);
   S.round = E.newRound(S.match.roundSeed);
   S.lastResult = null;
   show('game');
@@ -2108,7 +2148,7 @@ function runConquestAiRound(seat){
 function showMatchOver(m){
   const o=m.outcome;
   $('do-title').textContent= o.kind==='tie' ? "It's a tie" : `${S.players[o.player].name} wins`;
-  $('do-sub').textContent=`${S.players[0].name} ${m.totals[0]} · ${S.players[1].name} ${m.totals[1]}`;
+  $('do-sub').textContent=m.totals.map((t,i)=>`${S.players[i].name} ${t}`).join(' · ');
   $('d-over').showModal();
 }
 
@@ -3063,16 +3103,23 @@ for(const b of document.querySelectorAll('.botnav-btn')) b.addEventListener('cli
 { const fa=$('friend-add2'); if(fa) fa.addEventListener('click',()=>addFriendByCode($('friend-code2').value)); }
 window.__cc={ get S(){return S;}, LEVELS, challengeWin, challengeFail, refreshLives, renderMap, openLevel, openMap, levelFromXp, totalStars, gotoTab, CARD_DESIGNS, FACE_DECK_DESIGNS, MAP_ZONES, updateBadges };
 $('tile-ai').addEventListener('click',(e)=>{ if(e.target.closest('.pill')) return; startMatch('ai'); });
-$('tile-pass').addEventListener('click',()=>startMatch('pass'));
+$('tile-pass').addEventListener('click',openPassSetup);
+$('pp-start').addEventListener('click',()=>{ capturePassNames(); $('d-pass').close(); startMatch('pass'); });
+$('pp-cancel').addEventListener('click',()=>$('d-pass').close());
+for (const p of document.querySelectorAll('#pp-size .pill')){
+  const pick=()=>{ capturePassNames(); S.passCount=+p.dataset.n; renderPassNames(); };
+  p.addEventListener('click',pick);
+  p.addEventListener('keydown',(e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); pick(); }});
+}
 for (const p of document.querySelectorAll('#diff-picker .pill')){
   const pick=()=>{ S.difficulty=p.dataset.d;
     document.querySelectorAll('#diff-picker .pill').forEach(x=>x.setAttribute('aria-pressed',String(x===p))); };
   p.addEventListener('click',(e)=>{ e.stopPropagation(); pick(); });
   p.addEventListener('keydown',(e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); e.stopPropagation(); pick(); }});
 }
-for (const p of document.querySelectorAll('.size-row .pill')){
+for (const p of document.querySelectorAll('#o-make .size-row .pill')){
   const pick=()=>{ S.roomSize=+p.dataset.n;
-    document.querySelectorAll('.size-row .pill').forEach(x=>x.setAttribute('aria-pressed',String(x===p)));
+    document.querySelectorAll('#o-make .size-row .pill').forEach(x=>x.setAttribute('aria-pressed',String(x===p)));
     renderSeatConfig(); };
   p.addEventListener('click',pick);
   p.addEventListener('keydown',(e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); pick(); }});

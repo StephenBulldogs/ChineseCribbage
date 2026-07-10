@@ -52,6 +52,19 @@ eq('higher total wins', m.outcome, { kind: 'win', player: 1 });
 let m2 = E.newMatch(0); m2 = E.applyRoundNet(m2, 29); m2 = E.applyRoundNet(m2, 29);
 eq('tie', m2.outcome.kind, 'tie');
 
+// Multi-seat matches (pass & play): 2-4 players, seats rotate in order
+let m3 = E.newMatch(0, undefined, 3);
+eq('3p match sizes totals per seat', m3.totals, [0, 0, 0]);
+m3 = E.applyRoundNet(m3, 30);
+eq('3p turn rotates in seat order', m3.turn, 1);
+m3 = E.applyRoundNet(m3, 20);
+eq('3p waits until all rounds equal', m3.outcome.kind, 'playing');
+m3 = E.applyRoundNet(m3, 25);
+eq('3p unique leader wins', m3.outcome, { kind: 'win', player: 0 });
+let m4 = E.newMatch(0, undefined, 3);
+m4 = E.applyRoundNet(m4, 30); m4 = E.applyRoundNet(m4, 30); m4 = E.applyRoundNet(m4, 10);
+eq('3p tied leaders tie', m4.outcome.kind, 'tie');
+
 // His heels: Jack starter adds 2 to the round total
 {
   const mk=(r,s)=>({rank:r,suit:s});

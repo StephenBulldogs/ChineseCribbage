@@ -152,8 +152,20 @@ function CC_makeRows(E){
   $('btn-quit').click();
   check('quit returns home', !$('view-home').classList.contains('hidden'));
 
-  // pass & play handoff
+  // pass & play setup: player count + names
   $('tile-pass').click();
+  check('pass setup dialog opens', $('d-pass').open);
+  check('pass setup defaults to 2 name fields', doc.querySelectorAll('#pp-names input').length === 2);
+  doc.querySelector('#pp-size .pill[data-n="3"]').click();
+  check('choosing 3 players shows 3 name fields', doc.querySelectorAll('#pp-names input').length === 3);
+  doc.querySelector('#pp-names input[data-seat="0"]').value = 'Ada';
+  doc.querySelector('#pp-names input[data-seat="1"]').value = 'Ming';
+  $('pp-start').click();
+  check('pass match starts after setup', !$('d-pass').open && !$('view-game').classList.contains('hidden'));
+  check('rail shows a lane per player', doc.querySelectorAll('#g-rail .lane-row').length === 3);
+  check('first seat plays under its name', $('g-draw-label').textContent === 'Ada to place');
+
+  // pass & play handoff
   safety = 0;
   while (safety++ < 25) {
     const b = doc.querySelector('#g-rows .row-btn:not([disabled])');
@@ -162,10 +174,17 @@ function CC_makeRows(E){
   await waitFor(() => $('d-score').open, 3000);
   $('ds-continue').click();
   check('handoff dialog appears in pass mode', $('d-handoff').open);
-  check('handoff names Player 2', $('dh-name').textContent === 'Player 2');
+  check('handoff names the renamed second seat', $('dh-name').textContent === 'Ming');
   $('dh-ready').click();
   check('card hidden is NOT in effect for active player', doc.querySelector('#g-draw-card .card.back') === null);
   $('btn-quit').click();
+
+  // pass & play remembers the table for next time
+  $('tile-pass').click();
+  check('pass setup remembers 3 players', doc.querySelectorAll('#pp-names input').length === 3);
+  check('pass setup remembers names', doc.querySelector('#pp-names input[data-seat="1"]').value === 'Ming');
+  $('pp-cancel').click();
+  check('cancel closes pass setup without starting', !$('d-pass').open && !$('view-home').classList.contains('hidden'));
 
   // online configured → sign-in gate first
   $('splash-online').click();
