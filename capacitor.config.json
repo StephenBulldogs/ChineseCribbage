@@ -1,0 +1,13 @@
+{
+  "appId": "com.stephenbulldogs.chinesecribbage",
+  "appName": "Chinese Cribbage",
+  "webDir": "www",
+  "backgroundColor": "#0b1f17",
+  "android": {
+    "backgroundColor": "#0b1f17"
+  },
+  "ios": {
+    "backgroundColor": "#0b1f17",
+    "contentInset": "always"
+  }
+}

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Chinese Cribbage</string>
+    <string name="title_activity_main">Chinese Cribbage</string>
+    <string name="package_name">com.stephenbulldogs.chinesecribbage</string>
+    <string name="custom_url_scheme">com.stephenbulldogs.chinesecribbage</string>
+</resources>

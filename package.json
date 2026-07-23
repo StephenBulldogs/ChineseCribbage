@@ -1,0 +1,25 @@
+{
+  "name": "chinese-cribbage-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Native Android/iOS shell for Chinese Cribbage, wrapping the existing single-file web engine with Capacitor.",
+  "scripts": {
+    "build:www": "node scripts/copy-web.js",
+    "sync": "npm run build:www && npx cap sync",
+    "android": "npm run sync && npx cap open android",
+    "ios": "npm run sync && npx cap open ios",
+    "test:engine": "node engine.test.js",
+    "test:smoke": "node smoke.test.js",
+    "test:online": "node online.test.js",
+    "test:newfeatures": "node newfeatures.test.js",
+    "test:resume": "node resume.test.js",
+    "test:isolation": "node isolation.test.js",
+    "test": "npm run test:engine && npm run test:online && npm run test:newfeatures && npm run test:resume && npm run test:isolation"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/cli": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/ios": "^8.0.0"
+  }
+}
