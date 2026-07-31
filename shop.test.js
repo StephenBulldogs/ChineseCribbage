@@ -97,7 +97,7 @@ const waitFor = async (fn, ms) => { const t = Date.now(); while (Date.now() - t 
   check('shop: upgrading spends all 1000 coins', CC_A.S.profile.coins === 0);
   check('shop: profile flips to premium', CC_A.S.profile.premium === true);
   check('shop: premium persisted to the account', getP('users/u-alice/premium') === true);
-  check('premium: heart regrow drops to 20 minutes', CC_A.lifeRegrowMinutes() === 20);
+  check('premium: heart regrow drops to 15 minutes', CC_A.lifeRegrowMinutes() === 15);
   CC_A.openShop();
   check('shop: premium button now shows already-active', $A('shop-premium').disabled && $A('shop-premium').textContent.includes('active'));
 

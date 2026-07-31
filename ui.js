@@ -449,7 +449,7 @@ function pushLeaderboard() {
 
 const MAX_LIVES = 5;
 const STANDARD_LIFE_MS = 30 * 60 * 1000;
-const PREMIUM_LIFE_MS = 20 * 60 * 1000;
+const PREMIUM_LIFE_MS = 15 * 60 * 1000;
 const LIFE_MS = () => (typeof window.__lifeMs === 'number' ? window.__lifeMs
   : (S.profile && S.profile.premium) ? PREMIUM_LIFE_MS : STANDARD_LIFE_MS);
 const lifeRegrowMinutes = () => Math.round(LIFE_MS() / 60000);
