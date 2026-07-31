@@ -24,7 +24,7 @@ const S = {
   oRound:null, oSeed:0, oMoves:[], startedRound:-1,
   unwatch:null, pubUnwatch:null, publicRooms:null,
   // account & social
-  uid:null, profile:null, pendingName:'', authWatched:false,
+  uid:null, email:null, profile:null, pendingName:'', authWatched:false,
   friends:{}, friendInfo:{}, friendWatches:{}, challenges:{}, pendingChallenge:null,
   statsRecorded:{}
 };
@@ -272,6 +272,150 @@ function addXp(n, why) {
   pushLeaderboard();
   return n;
 }
+
+/* ====================================================================
+   COINS & SHOP
+   --------------------------------------------------------------------
+   Coins: +1 per win in a normal match (vs-AI or an online table),
+   +2 per star earned in a Conquest level (every clear, including
+   replays of a level you've already beaten). Spend 1,000 to unlock
+   Premium (20-minute heart regrow instead of 30) or 20 for an instant
+   extra Conquest life. Guests keep coins for the session only, same as
+   every other piece of account state in this app.
+   ==================================================================== */
+const SHOP_PREMIUM_COST = 1000;
+const SHOP_LIFE_COST = 20;
+function addCoins(n) {
+  if (!n || !S.uid || !S.profile) return 0;
+  S.profile.coins = (S.profile.coins || 0) + n;
+  if (fdb) fdb.ref('users/' + S.uid + '/coins').set(S.profile.coins).catch(() => {});
+  renderCoinBadge();
+  return n;
+}
+function spendCoins(n) {
+  if (!S.uid || !S.profile || (S.profile.coins || 0) < n) return false;
+  S.profile.coins -= n;
+  if (fdb) fdb.ref('users/' + S.uid + '/coins').set(S.profile.coins).catch(() => {});
+  renderCoinBadge();
+  return true;
+}
+function renderCoinBadge() {
+  const btn = $('btn-shop'); if (!btn) return;
+  const has = !!(S.uid && S.profile);
+  btn.classList.toggle('hidden', !has);
+  const t = $('coin-total'); if (t) t.textContent = has ? (S.profile.coins || 0) : '0';
+}
+function openShop(){
+  if (!S.uid || !S.profile){ openOnline(); return; }
+  const guest = S.profile.provider==='guest';
+  const coins = S.profile.coins || 0;
+  $('shop-balance').textContent = coins;
+  const premBtn = $('shop-premium');
+  if (S.profile.premium){ premBtn.disabled = true; premBtn.textContent = 'Premium active'; }
+  else if (guest){ premBtn.disabled = true; premBtn.textContent = 'Sign in with Google to upgrade'; }
+  else { premBtn.disabled = coins < SHOP_PREMIUM_COST; premBtn.textContent = `Upgrade — ${SHOP_PREMIUM_COST} coins`; }
+  refreshLives();
+  const lifeBtn = $('shop-life');
+  if (guest){ lifeBtn.disabled = true; lifeBtn.textContent = 'Sign in with Google to buy'; }
+  else if (S.campaign.lives >= MAX_LIVES){ lifeBtn.disabled = true; lifeBtn.textContent = 'Hearts already full'; }
+  else { lifeBtn.disabled = coins < SHOP_LIFE_COST; lifeBtn.textContent = `Buy a life — ${SHOP_LIFE_COST} coins`; }
+  $('shop-note').textContent = guest ? 'Guest sessions are casual: sign in with Google to keep coins and Premium.' : '';
+  $('d-shop').showModal();
+}
+function buyPremium(){
+  if (!S.uid || !S.profile || S.profile.premium || S.profile.provider==='guest') return;
+  if (!spendCoins(SHOP_PREMIUM_COST)) return;
+  S.profile.premium = true;
+  if (fdb) fdb.ref('users/'+S.uid+'/premium').set(true).catch(()=>{});
+  renderLivesBar();
+  openShop();
+}
+function buyLife(){
+  if (!S.uid || !S.profile || S.profile.provider==='guest') return;
+  refreshLives();
+  if (S.campaign.lives >= MAX_LIVES) return;
+  if (!spendCoins(SHOP_LIFE_COST)) return;
+  S.campaign.lives = Math.min(MAX_LIVES, S.campaign.lives + 1);
+  saveCampaign();
+  renderLivesBar();
+  openShop();
+}
+
+/* ====================================================================
+   ADMIN
+   --------------------------------------------------------------------
+   Client-side gate only, matching this app's existing trust model (no
+   server-side enforcement anywhere else either): the panel only shows
+   for this one Google account. See README for the Firebase rules note.
+   ==================================================================== */
+const ADMIN_EMAIL = 'sschwender@gmail.com';
+const isAdmin = () => S.email === ADMIN_EMAIL;
+let adminUsers = null;
+async function openAdmin(){
+  if (!isAdmin()) return;
+  $('d-settings').close();
+  $('admin-search').value = '';
+  $('admin-list').innerHTML = '<div class="pub-empty">Loading…</div>';
+  $('d-admin').showModal();
+  try{
+    const snap = await fdb.ref('users').get();
+    adminUsers = snap.exists() ? snap.val() : {};
+  }catch(e){ adminUsers = {}; $('admin-list').innerHTML = '<div class="pub-empty">Could not load accounts.</div>'; return; }
+  renderAdminList();
+}
+function renderAdminList(){
+  if (!adminUsers) return;
+  const q = ($('admin-search').value || '').trim().toLowerCase();
+  const rows = Object.entries(adminUsers)
+    .filter(([uid,u]) => u && (!q || (u.name||'').toLowerCase().includes(q) || (u.email||'').toLowerCase().includes(q)))
+    .sort((a,b) => (a[1].name||'').localeCompare(b[1].name||''));
+  $('admin-list').innerHTML = rows.length===0 ? '<div class="pub-empty">No matching accounts.</div>'
+    : rows.map(([uid,u]) => {
+      const lives = (u.campaign && typeof u.campaign.lives==='number') ? u.campaign.lives : MAX_LIVES;
+      return `<div class="admin-row">
+        <div class="who">${esc(u.name||'Player')}<span class="age">${esc(u.email||u.provider||'guest')}</span></div>
+        <div class="admin-fields">
+          <label>Coins <input type="number" min="0" step="1" class="admin-coins" data-uid="${uid}" value="${u.coins||0}"></label>
+          <label>Hearts <input type="number" min="0" max="${MAX_LIVES}" step="1" class="admin-lives" data-uid="${uid}" value="${lives}"></label>
+          <button class="btn ${u.premium?'btn-ghost':'btn-primary'} mini" data-prem="${uid}">${u.premium?'Revoke premium':'Grant premium'}</button>
+        </div>
+      </div>`;
+    }).join('');
+  for (const b of $('admin-list').querySelectorAll('[data-prem]')) b.addEventListener('click', () => toggleAdminPremium(b.dataset.prem));
+  for (const inp of $('admin-list').querySelectorAll('.admin-coins')) inp.addEventListener('change', () => setAdminCoins(inp.dataset.uid, inp.value));
+  for (const inp of $('admin-list').querySelectorAll('.admin-lives')) inp.addEventListener('change', () => setAdminLives(inp.dataset.uid, inp.value));
+}
+async function toggleAdminPremium(uid){
+  const u = adminUsers && adminUsers[uid]; if (!u) return;
+  const next = !u.premium;
+  try{
+    await fdb.ref('users/'+uid+'/premium').set(next);
+    u.premium = next;
+    if (uid===S.uid && S.profile){ S.profile.premium = next; renderLivesBar(); }
+    renderAdminList();
+  }catch(e){}
+}
+async function setAdminCoins(uid, val){
+  const u = adminUsers && adminUsers[uid]; if (!u) return;
+  const n = Math.max(0, Math.floor(Number(val)) || 0);
+  try{
+    await fdb.ref('users/'+uid+'/coins').set(n);
+    u.coins = n;
+    if (uid===S.uid && S.profile){ S.profile.coins = n; renderCoinBadge(); }
+    renderAdminList();
+  }catch(e){}
+}
+async function setAdminLives(uid, val){
+  const u = adminUsers && adminUsers[uid]; if (!u) return;
+  const n = Math.max(0, Math.min(MAX_LIVES, Math.floor(Number(val)) || 0));
+  u.campaign = u.campaign || {};
+  u.campaign.lives = n;
+  try{
+    await fdb.ref('users/'+uid+'/campaign/lives').set(n);
+    if (uid===S.uid){ S.campaign.lives = n; renderLivesBar(); }
+    renderAdminList();
+  }catch(e){}
+}
 const BANNERS = [
   { id: 'lacquer',  name: 'Lacquer',     css: 'linear-gradient(100deg,#41221C,#2B1714)',          need: () => true,                         needText: 'default' },
   { id: 'jade',     name: 'Jade tide',   css: 'linear-gradient(100deg,#2C6557,#1d4a3f)',          need: (l,s) => l >= 3,                    needText: 'player level 3' },
@@ -304,7 +448,11 @@ function pushLeaderboard() {
 }
 
 const MAX_LIVES = 5;
-const LIFE_MS = () => (typeof window.__lifeMs === 'number' ? window.__lifeMs : 30 * 60 * 1000);
+const STANDARD_LIFE_MS = 30 * 60 * 1000;
+const PREMIUM_LIFE_MS = 20 * 60 * 1000;
+const LIFE_MS = () => (typeof window.__lifeMs === 'number' ? window.__lifeMs
+  : (S.profile && S.profile.premium) ? PREMIUM_LIFE_MS : STANDARD_LIFE_MS);
+const lifeRegrowMinutes = () => Math.round(LIFE_MS() / 60000);
 
 /* 100 Conquest levels, generated so the catalogue can grow without code
    churn. Types:
@@ -617,7 +765,7 @@ function openLevel(id){
   const ok = S.campaign.lives > 0;
   $('dl-play').disabled = !ok;
   $('dl-play').textContent = ok ? 'Play (1 ❤ at stake)' : 'No lives left';
-  $('dl-lives').innerHTML = ok ? '' : 'A new heart grows every 30 minutes.';
+  $('dl-lives').innerHTML = ok ? '' : 'A new heart grows every ' + lifeRegrowMinutes() + ' minutes.';
   $('d-level').showModal();
 }
 function startLevel(){
@@ -716,6 +864,7 @@ function challengeWin(stars){
   const c = S.campaign;
   const firstClear = !(c.stars[lv.id] > 0);
   const xp = addXp(firstClear ? conquestClearXp(stars) : XP_AWARDS.conquestRepeat, 'conquest');
+  const coins = addCoins(stars * 2); // replays still pay out, same as first clears
   c.stars[lv.id] = Math.max(c.stars[lv.id] || 0, stars);
   if (lv.id >= c.level && lv.id < LEVELS.length) c.level = lv.id + 1;
   saveCampaign();
@@ -723,7 +872,7 @@ function challengeWin(stars){
   $('dcr-eyebrow').textContent = 'Level ' + lv.id + ' cleared';
   $('dcr-title').textContent = lv.name;
   $('dcr-stars').textContent = '★'.repeat(stars) + '☆'.repeat(3 - stars);
-  $('dcr-sub').textContent = 'The path continues.' + ` · +${xp} xp`;
+  $('dcr-sub').textContent = 'The path continues.' + ` · +${xp} xp` + (coins ? ` · +${coins} coins` : '');
   $('dcr-retry').classList.add('hidden');
   $('dcr-next').classList.toggle('hidden', lv.id >= LEVELS.length);
   S.lastClearedLevel = lv.id;
@@ -740,7 +889,7 @@ function challengeFail(){
   $('dcr-stars').textContent = '';
   $('dcr-sub').textContent = S.campaign.lives > 0
     ? 'You have ' + S.campaign.lives + (S.campaign.lives === 1 ? ' life' : ' lives') + ' left.'
-    : 'No lives left. A new heart grows every 30 minutes.';
+    : 'No lives left. A new heart grows every ' + lifeRegrowMinutes() + ' minutes.';
   $('dcr-retry').classList.toggle('hidden', S.campaign.lives <= 0);
   $('dcr-next').classList.add('hidden');
   S.lastClearedLevel = null;
@@ -946,7 +1095,13 @@ function runConquestAiRound(seat){
 function showMatchOver(m){
   const o=m.outcome;
   $('do-title').textContent= o.kind==='tie' ? "It's a tie" : `${S.players[o.player].name} wins`;
-  $('do-sub').textContent=m.totals.map((t,i)=>`${S.players[i].name} ${t}`).join(' · ');
+  let sub=m.totals.map((t,i)=>`${S.players[i].name} ${t}`).join(' · ');
+  // Coins for a normal (vs-AI) win by the human seat; pass & play and solo aren't "wins" in this sense.
+  if (S.mode==='ai' && o.kind!=='tie' && S.players[o.player] && S.players[o.player].kind==='human'){
+    const coins = addCoins(1);
+    if (coins) sub += ` · +${coins} coins`;
+  }
+  $('do-sub').textContent=sub;
   $('d-over').showModal();
 }
 
@@ -1022,12 +1177,13 @@ async function onAuth(user){
   // Google auth state changes only. Never clobber an active guest session.
   if(!user){
     if(S.profile && S.profile.provider==='guest') return;
-    S.uid=null; S.profile=null; renderAccount(); return;
+    S.uid=null; S.profile=null; S.email=null; renderAccount(); return;
   }
   await establishUser(user);
 }
 function resetAccountState(){
   S.profile=null;
+  S.email=null;
   S.campaign=blankCampaign();
   S.activeSnap=null;
   S.friends={}; S.friendInfo={}; S.challenges={};
@@ -1040,17 +1196,23 @@ async function establishUser(user){
   // session so nothing leaks across accounts.
   resetAccountState();
   S.uid=user.uid;
+  S.email=user.email||null;
   try{
     const snap=await fdb.ref('users/'+user.uid).get();
     if(snap.exists()){
       S.profile=snap.val();
       if(!S.profile.stats) S.profile.stats=blankStats();
+      // backfill for accounts created before email/coins/premium existed
+      if(user.email && S.profile.email!==user.email){
+        S.profile.email=user.email;
+        fdb.ref('users/'+user.uid+'/email').set(user.email).catch(()=>{});
+      }
     } else {
       const name=(user.displayName&&user.displayName.split(' ')[0]) || S.pendingName
         || 'Guest-'+Math.floor(1000+Math.random()*9000);
       const friendCode=makeFriendCode();
-      S.profile={name, provider:user.isAnonymous?'guest':'google', friendCode,
-        createdAt:Date.now(), online:true, stats:blankStats()};
+      S.profile={name, provider:user.isAnonymous?'guest':'google', friendCode, email:user.email||null,
+        createdAt:Date.now(), online:true, stats:blankStats(), coins:0, premium:false};
       await fdb.ref('users/'+user.uid).set(S.profile);
       await fdb.ref('friendCodes/'+friendCode).set(user.uid);
     }
@@ -1125,6 +1287,7 @@ function recordMatchEnd(room){
     if(rounds>(st.longestGame||0)) st.longestGame=rounds;
   });
   addXp(room.result==='tie' ? XP_AWARDS.matchTie : room.result==='p'+S.seat ? XP_AWARDS.matchWin : XP_AWARDS.matchLoss, 'match');
+  if(room.result==='p'+S.seat) addCoins(1);
   if(fdb) fdb.ref('users/'+S.uid+'/games/'+S.code).remove().catch(()=>{});
 }
 function trackGame(code){
@@ -1354,6 +1517,7 @@ async function openBoard(tab){
 }
 
 function renderAccount(){
+  renderCoinBadge();
   const bar=$('o-account'); if(!bar) return;
   if(!S.uid||!S.profile){ bar.innerHTML=''; renderLobbyGates(); return; }
   const lv=levelFromXp(S.profile.xp);
@@ -1898,7 +2062,10 @@ $('dcr-next').addEventListener('click',()=>{ $('d-chal').close();
   if(nxt){ S.pendingLevel=nxt; startLevel(); } else openMap(); });
 for(const b of document.querySelectorAll('.botnav-btn')) b.addEventListener('click',()=>gotoTab(b.dataset.tab));
 { const fa=$('friend-add2'); if(fa) fa.addEventListener('click',()=>addFriendByCode($('friend-code2').value)); }
-window.__cc={ get S(){return S;}, LEVELS, challengeWin, challengeFail, refreshLives, renderMap, openLevel, openMap, levelFromXp, totalStars, gotoTab, CARD_DESIGNS, FACE_DECK_DESIGNS, MAP_ZONES, updateBadges };
+window.__cc={ get S(){return S;}, LEVELS, challengeWin, challengeFail, refreshLives, renderMap, openLevel, openMap, levelFromXp, totalStars, gotoTab, CARD_DESIGNS, FACE_DECK_DESIGNS, MAP_ZONES, updateBadges,
+  addCoins, spendCoins, isAdmin, ADMIN_EMAIL, openAdmin, openShop, buyPremium, buyLife, showMatchOver, SHOP_PREMIUM_COST, SHOP_LIFE_COST,
+  toggleAdminPremium, setAdminCoins, setAdminLives, get adminUsers(){return adminUsers;},
+  LIFE_MS, lifeRegrowMinutes, STANDARD_LIFE_MS, PREMIUM_LIFE_MS, MAX_LIVES };
 $('tile-ai').addEventListener('click',(e)=>{ if(e.target.closest('.pill')) return; startMatch('ai'); });
 $('tile-pass').addEventListener('click',openPassSetup);
 $('pp-start').addEventListener('click',()=>{ capturePassNames(); $('d-pass').close(); startMatch('pass'); });
@@ -1968,6 +2135,7 @@ function openSettings(){
   } else {
     acc.innerHTML=`<div class="set-row"><span>Not signed in</span></div>`;
   }
+  $('set-admin').classList.toggle('hidden', !isAdmin());
   $('d-settings').showModal();
 }
 function toggleSetting(el, apply){
@@ -1981,6 +2149,17 @@ $('set-rules').addEventListener('click',()=>{ $('d-settings').close(); $('d-rule
 $('set-sound').addEventListener('click',function(){ toggleSetting(this,(on)=>{ S.sound=on; }); });
 $('set-motion').addEventListener('click',function(){ toggleSetting(this,(on)=>{ S.reduceMotion=on; document.body.classList.toggle('reduce-motion',on); }); });
 $('set-fast').addEventListener('click',function(){ toggleSetting(this,(on)=>{ window.__fastCount=on; }); });
+$('set-admin').addEventListener('click',openAdmin);
+
+// ----- shop -----
+$('btn-shop').addEventListener('click',openShop);
+$('shop-close').addEventListener('click',()=>$('d-shop').close());
+$('shop-premium').addEventListener('click',buyPremium);
+$('shop-life').addEventListener('click',buyLife);
+
+// ----- admin -----
+$('admin-close').addEventListener('click',()=>$('d-admin').close());
+$('admin-search').addEventListener('input',renderAdminList);
 
 document.addEventListener('keydown',(e)=>{
   if(e.key<'1'||e.key>'4'||e.repeat) return;

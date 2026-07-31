@@ -28,7 +28,7 @@ An online campaign for Google-signed-in accounts (guests stay casual: no Conques
 
 **Stars:** for solo and single-hand levels, 3 stars if you finish with 2+ rounds to spare, 2 with 1 to spare, 1 on the final allowed round. For AI duels, 3 stars if you win in 1-3 rounds, 2 in 4-5, 1 in 6+.
 
-**Lives:** 5 hearts. Failing a level costs one, and quitting mid-level counts as a fail. One heart regrows every **30 minutes**; the regrow clock is a stored timestamp, so going offline and coming back refills exactly the hearts you earned while away. Everything (unlocked level, stars, hearts, regrow clock) saves to your account.
+**Lives:** 5 hearts. Failing a level costs one, and quitting mid-level counts as a fail. One heart regrows every **30 minutes** (**20 minutes** for Premium accounts, see Coins & Shop below); the regrow clock is a stored timestamp, so going offline and coming back refills exactly the hearts you earned while away. Everything (unlocked level, stars, hearts, regrow clock) saves to your account.
 
 **Resume:** the level you are currently playing is snapshotted to your account after every placement and round, including the deal's seed and your placements so far. If you close the tab or lose connection mid-level, signing back in offers a **Resume** that drops you back into the exact board you left, with no life lost and no progress missing. The snapshot clears only when the level actually resolves.
 
@@ -39,6 +39,22 @@ An online campaign for Google-signed-in accounts (guests stay casual: no Conques
 The online section opens on a **menu hub** of three large jade-and-gold cards rather than one long form: **Make Table** (host 2-4 players, configure AI seats, public or private), **Find Table** (browse open/in-play tables, join by code, manage friends and challenges), and **Conquest** (the campaign). A back arrow returns to the hub from any panel. A signed-in account bar shows an avatar, player level and an XP bar.
 
 The home screen is a splash with two doors (Offline / Online). A sticky top app-bar carries the wordmark and quick buttons for **how-to-play (ⓘ)** and a **settings panel (⚙)** with sound, reduce-motion, and fast-count toggles plus account sign-out, in the style of mobile games. The Conquest map is a flowing gold trail of glowing nodes with type icons, a pulsing "next level" marker, a stars-and-hearts header, and auto-scroll to your current spot.
+
+## Coins, the Shop & Premium
+
+Signed-in Google accounts earn **coins** by playing: **+1 coin** per win in a normal match (versus AI, or an online table), and **+2 coins per star** earned in a Conquest level — including replays of a level you've already cleared. Your coin total shows at all times as a gold pill in the top app bar (tap it to open the Shop).
+
+The **Shop** (tap the coin pill) spends coins two ways:
+- **Premium — 1,000 coins**, a one-time account upgrade. Premium accounts regrow Conquest hearts every **20 minutes** instead of 30.
+- **Extra life — 20 coins**, an instant +1 Conquest heart (up to the usual 5-heart cap).
+
+Guest sessions earn and can spend coins too, but since guest identities aren't persistent (see Accounts below), the Shop blocks guests from buying Premium or lives — sign in with Google first to keep them.
+
+## Admin panel
+
+The Google account **sschwender@gmail.com** sees an **Admin panel** button in Settings (⚙). It lists every account (name, email, coins, hearts, Premium status) with a search box, and lets the admin directly edit any account's **coins**, **hearts**, and toggle **Premium** on/off — for comping Premium, fixing a stuck account, etc.
+
+This gate is **client-side only**, the same trust model the rest of this app already uses for stats, XP, and Conquest progress (see "Honest limits" below): the panel simply doesn't render unless the signed-in Firebase Auth user's email matches. It is not a substitute for real server-side authorization. See the Firebase rules block below for the one rule change this feature needs.
 
 ## Player levels and banners
 
@@ -74,7 +90,8 @@ The Firebase config for the `chinese-cribbage` project is already embedded in `i
       "$code": { ".write": true }
     },
     "users": {
-      "$uid": { ".read": true, ".write": true }
+      ".read": true,
+      "$uid": { ".write": true }
     },
     "friendCodes": {
       ".read": true,
@@ -88,7 +105,9 @@ The Firebase config for the `chinese-cribbage` project is already embedded in `i
 }
 ```
 
-(These open rules are fine for friends-and-family; before anything truly public, scope user writes with `"$uid": { ".write": "auth.uid === $uid" }` and harden the social writes with security rules or Cloud Functions.)
+**If you already have this project's rules deployed from before the Coins/Shop/Admin feature**, you need to make exactly one change: move `".read": true` from under `"$uid"` up to the `"users"` node itself (as shown above). That's what lets the admin panel list every account in one query (`fdb.ref('users').get()`) instead of only ever reading one known uid at a time — the same pattern `publicRooms` and `friendCodes` already use. Nothing else needs to change: coins, `premium`, and `email` are just new fields under the existing `users/$uid` node, already covered by the existing `"$uid": { ".write": true }` rule.
+
+(These open rules are fine for friends-and-family; before anything truly public, scope user writes with `"$uid": { ".write": "auth.uid === $uid" }` and harden the social writes with security rules or Cloud Functions. Note that doing so would also block **guest** sign-in as currently implemented, since guests never authenticate with Firebase Auth at all — their `uid` is a locally-generated string, so `auth.uid` is never set for their writes. The admin panel's email gate is client-side only, same as every other write in this app; nothing stops a signed-in user from editing their own `coins`/`premium` fields directly via the browser console short of adding Cloud Functions to mediate purchases.)
 
 Fine for friends-and-family; add Firebase Anonymous Auth before anything public.
 
@@ -97,12 +116,20 @@ Fine for friends-and-family; add Firebase Anonymous Auth before anything public.
 ## Files & tests
 
 ```
-index.html        the whole site (engine inlined)
-engine.js         the game engine source (injected into index.html at build)
+index.html        the whole site (engine + ui + online inlined; this is the deployed artifact and what the tests below load)
+engine.js         the game engine source (kept in sync with the copy inlined in index.html)
+ui.js             the UI/app source (kept in sync with the copy inlined in index.html)
+online.js         Firebase loading + online room protocol source (kept in sync with the copy inlined in index.html)
 engine.test.js    engine tests. node engine.test.js
 smoke.test.js     headless UI test via jsdom. npm i jsdom && node smoke.test.js
 online.test.js    dual-client protocol test incl. spectating + rejoin. node online.test.js
+resume.test.js    Conquest resume-after-close test. node resume.test.js
+isolation.test.js per-account state isolation test. node isolation.test.js
+newfeatures.test.js  forfeit + idle-table auto-close tests. node newfeatures.test.js
+shop.test.js      coins, Premium, the Shop, and the admin panel. node shop.test.js
 ```
+
+`ui.js` and `index.html`'s inlined copy of it must always match exactly — there is no build step, so any change to one has to be hand-copied into the other.
 
 The engine port is verified against the same test vectors as the mobile app, including real scored hands and the equal-rounds match rule.
 
