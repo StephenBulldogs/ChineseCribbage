@@ -28,7 +28,7 @@ An online campaign for Google-signed-in accounts (guests stay casual: no Conques
 
 **Stars:** for solo and single-hand levels, 3 stars if you finish with 2+ rounds to spare, 2 with 1 to spare, 1 on the final allowed round. For AI duels, 3 stars if you win in 1-3 rounds, 2 in 4-5, 1 in 6+.
 
-**Lives:** 5 hearts. Failing a level costs one, and quitting mid-level counts as a fail. One heart regrows every **30 minutes** (**20 minutes** for Premium accounts, see Coins & Shop below); the regrow clock is a stored timestamp, so going offline and coming back refills exactly the hearts you earned while away. Everything (unlocked level, stars, hearts, regrow clock) saves to your account.
+**Lives:** 5 hearts. Failing a level costs one, and quitting mid-level counts as a fail. One heart regrows every **30 minutes** (**15 minutes** for Premium accounts, see Coins & Shop below); the regrow clock is a stored timestamp, so going offline and coming back refills exactly the hearts you earned while away. Everything (unlocked level, stars, hearts, regrow clock) saves to your account.
 
 **Resume:** the level you are currently playing is snapshotted to your account after every placement and round, including the deal's seed and your placements so far. If you close the tab or lose connection mid-level, signing back in offers a **Resume** that drops you back into the exact board you left, with no life lost and no progress missing. The snapshot clears only when the level actually resolves.
 
@@ -45,7 +45,7 @@ The home screen is a splash with two doors (Offline / Online). A sticky top app-
 Signed-in Google accounts earn **coins** by playing: **+1 coin** per win in a normal match (versus AI, or an online table), and **+2 coins per star** earned in a Conquest level — including replays of a level you've already cleared. Your coin total shows at all times as a gold pill in the top app bar (tap it to open the Shop).
 
 The **Shop** (tap the coin pill) spends coins two ways:
-- **Premium — 1,000 coins**, a one-time account upgrade. Premium accounts regrow Conquest hearts every **20 minutes** instead of 30.
+- **Premium — 1,000 coins**, a one-time account upgrade. Premium accounts regrow Conquest hearts every **15 minutes** instead of 30.
 - **Extra life — 20 coins**, an instant +1 Conquest heart (up to the usual 5-heart cap).
 
 Guest sessions earn and can spend coins too, but since guest identities aren't persistent (see Accounts below), the Shop blocks guests from buying Premium or lives — sign in with Google first to keep them.
