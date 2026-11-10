@@ -144,7 +144,8 @@ extension Account on App {
         'web-context-canceled': 'The sign-in window closed before finishing. Please try again.',
         'canceled': 'The sign-in window closed before finishing. Please try again.',
         'network-request-failed': 'Network error during sign-in. Check your connection and try again.',
-        'operation-not-allowed': 'Google sign-in is not enabled for this Firebase project.',
+        'operation-not-allowed': 'This sign-in method is not enabled for this Firebase project yet.',
+        'user-mismatch': 'That was a different account. Sign in with the account you want to delete.',
       };
       return msgs[err.code] ?? err.message ?? 'Sign-in failed. Please try again.';
     }
@@ -165,6 +166,83 @@ extension Account on App {
     }
   }
 
+  /// Sign in with Apple (iOS). Apple requires it alongside Google sign-in.
+  Future<void> signInApple() async {
+    authError = null;
+    refresh();
+    if (!hasDb) return;
+    try {
+      final provider = AppleAuthProvider()
+        ..addScope('email')
+        ..addScope('name');
+      await FirebaseAuth.instance.signInWithProvider(provider);
+    } catch (err) {
+      authError = _friendlyAuthMessage(err);
+      refresh();
+    }
+  }
+
+  /// Which provider a Firebase user signed in with: 'google' | 'apple'.
+  String _providerOf(User user) {
+    for (final p in user.providerData) {
+      if (p.providerId == 'apple.com') return 'apple';
+    }
+    return 'google';
+  }
+
+  /// Permanently delete this account and its data (required by both app
+  /// stores). Google/Apple accounts confirm by signing in again first, which
+  /// also satisfies Firebase's "recent login" rule for deleting a user.
+  /// Returns null on success, or a message to show.
+  Future<String?> deleteAccount() async {
+    final id = uid;
+    final prof = profile;
+    if (id == null || prof == null || !hasDb) return 'Not signed in.';
+    final guest = prof['provider'] == 'guest';
+    User? user;
+    if (!guest) {
+      user = FirebaseAuth.instance.currentUser;
+      if (user == null || user.uid != id) return 'Sign in again, then try deleting.';
+      try {
+        final AuthProvider p = _providerOf(user) == 'apple' ? AppleAuthProvider() : GoogleAuthProvider();
+        await user.reauthenticateWithProvider(p);
+      } catch (err) {
+        return _friendlyAuthMessage(err);
+      }
+    }
+    if (code != null) leaveRoom();
+    try {
+      // Stop presence from re-creating users/{uid} when the connection drops.
+      await ref('users/$id').onDisconnect().cancel();
+      final updates = <String, Object?>{
+        'users/$id': null,
+        'leaderboard/$id': null,
+      };
+      final fc = prof['friendCode'];
+      if (fc != null) updates['friendCodes/$fc'] = null;
+      for (final fuid in friends.keys) {
+        updates['users/$fuid/friends/$id'] = null;
+      }
+      await _db!.ref().update(updates);
+    } catch (err) {
+      return 'Could not delete your data: $err';
+    }
+    if (user != null) {
+      try {
+        await user.delete();
+      } catch (err) {
+        // Data is gone; the sign-in record will be orphaned but harmless.
+        debugPrint('auth user delete failed: $err');
+      }
+    }
+    uid = null;
+    myName = '';
+    _resetAccountState();
+    if (view == AppView.online) oPanel = OPanel.auth;
+    refresh();
+    return null;
+  }
+
   /// Guest: a plain local session. No auth provider, no password.
   Future<void> signInGuest(String name) async {
     if (!hasDb) return;
@@ -183,7 +261,7 @@ extension Account on App {
   void doSignOut() {
     try {
       if (uid != null && hasDb) ref('users/$uid/online').set(false).catchError((_) {});
-      if (profile != null && profile!['provider'] == 'google') FirebaseAuth.instance.signOut();
+      if (profile != null && profile!['provider'] != 'guest') FirebaseAuth.instance.signOut();
     } catch (_) {}
     uid = null;
     myName = '';
@@ -193,7 +271,7 @@ extension Account on App {
   }
 
   Future<void> _onAuth(User? user) async {
-    // Google auth state changes only. Never clobber an active guest session.
+    // Google/Apple auth state changes only. Never clobber an active guest session.
     if (user == null) {
       if (isGuest) return;
       if (uid != null) {
@@ -204,7 +282,8 @@ extension Account on App {
       return;
     }
     if (uid == user.uid) return;
-    await _establishUser(user.uid, isAnonymous: false, displayName: user.displayName, mail: user.email);
+    await _establishUser(user.uid,
+        isAnonymous: false, displayName: user.displayName, mail: user.email, provider: _providerOf(user));
   }
 
   void _resetAccountState() {
@@ -227,7 +306,7 @@ extension Account on App {
   }
 
   Future<void> _establishUser(String id,
-      {required bool isAnonymous, String? displayName, String? mail}) async {
+      {required bool isAnonymous, String? displayName, String? mail, String provider = 'google'}) async {
     // Wipe any in-memory state from a previous account so nothing leaks.
     _resetAccountState();
     uid = id;
@@ -244,11 +323,11 @@ extension Account on App {
       } else {
         final name = (displayName != null && displayName.isNotEmpty ? displayName.split(' ').first : null) ??
             (pendingName.isNotEmpty ? pendingName : null) ??
-            'Guest-${1000 + math.Random().nextInt(9000)}';
+            '${isAnonymous ? 'Guest' : 'Player'}-${1000 + math.Random().nextInt(9000)}';
         final fc = makeFriendCode();
         profile = {
           'name': name,
-          'provider': isAnonymous ? 'guest' : 'google',
+          'provider': isAnonymous ? 'guest' : provider,
           'friendCode': fc,
           'email': mail,
           'createdAt': _now(),

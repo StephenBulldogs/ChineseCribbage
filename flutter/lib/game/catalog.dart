@@ -8,6 +8,9 @@ const aiNames = {'easy': 'Deckhand', 'medium': 'Navigator', 'hard': 'Captain'};
 
 const adminEmail = 'sschwender@gmail.com';
 
+/// Hosted with the website on GitHub Pages (privacy.html in the repo root).
+const privacyPolicyUrl = 'https://stephenbulldogs.github.io/ChineseCribbage/privacy.html';
+
 // Online seat takeover / idle expiry.
 const takeoverMs = 120000;
 const expireMs = 72 * 60 * 60 * 1000;

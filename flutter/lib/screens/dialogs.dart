@@ -1,6 +1,7 @@
 // Every modal from the website's <dialog> elements, opened by id so the
 // controller can open/close them the way ui.js calls showModal()/close().
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../app/controller.dart';
 import '../engine/engine.dart' show PlayingCard;
@@ -528,6 +529,18 @@ void showSettings(App app) => _show('settings', app, (ctx) {
           close('settings');
           showRules(app);
         }),
+        _gap,
+        GhostButton('Privacy policy', onPressed: () {
+          launchUrl(Uri.parse(privacyPolicyUrl), mode: LaunchMode.externalApplication);
+        }),
+        if (app.uid != null && app.profile != null) ...[
+          _gap,
+          TextButton(
+            onPressed: () => _confirmDeleteAccount(app),
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFFE08070)),
+            child: const Text('Delete account'),
+          ),
+        ],
         if (app.isAdmin) ...[
           _gap,
           GhostButton('Admin panel', onPressed: () {
@@ -755,3 +768,38 @@ class _AdminNumState extends State<_AdminNum> {
         onSubmitted: widget.onDone,
       );
 }
+
+// ---------- account deletion ----------
+void _confirmDeleteAccount(App app) {
+  final guest = app.isGuest;
+  _show('delete', app, (ctx) => _Sheet(children: [
+        const Eyebrow('Delete account'),
+        _big('Delete everything?', size: 26),
+        _sub('This permanently removes your profile, stats, XP, coins, Premium, Conquest progress, '
+            'friends and leaderboard entry. It can\'t be undone.'),
+        if (!guest) _sub('To confirm, you\'ll be asked to sign in again.'),
+        FilledButton(
+          onPressed: () async {
+            close('delete');
+            close('settings');
+            final err = await app.deleteAccount();
+            _notice(app, err == null ? 'Account deleted' : 'Not deleted',
+                err ?? 'Your account and its data have been removed.');
+          },
+          style: FilledButton.styleFrom(
+              backgroundColor: C.inkRed,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              shape: const StadiumBorder()),
+          child: const Text('Delete my account', style: TextStyle(fontWeight: FontWeight.w700)),
+        ),
+        _gap,
+        GhostButton('Cancel', onPressed: () => close('delete')),
+      ]));
+}
+
+void _notice(App app, String title, String body) => _show('notice', app, (ctx) => _Sheet(children: [
+      _big(title, size: 24),
+      _sub(body),
+      PrimaryButton('OK', onPressed: () => close('notice')),
+    ]), dismissible: true);
