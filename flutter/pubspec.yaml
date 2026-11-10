@@ -1,0 +1,30 @@
+name: chinese_cribbage
+description: "Chinese Cribbage for Android and iOS — a Flutter port of the web game."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  firebase_core: ^5.1.0
+  firebase_database: ^13.0.1
+  firebase_auth: ^7.0.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/backs/
+    - assets/tiles/
+    - assets/bg/
+    - assets/faces/imperial/
+    - assets/faces/dragonbrush/
+    - assets/faces/jadeporc/
