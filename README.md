@@ -113,6 +113,10 @@ Fine for friends-and-family; add Firebase Anonymous Auth before anything public.
 
 **Cross-play:** the room protocol is identical to the React Native app's, and both point at the same Firebase project. a browser player can duel an app player with the same room codes.
 
+## Mobile apps (Flutter)
+
+`flutter/` holds a Flutter/Dart port for **Android and iOS** with the same modes, Conquest, accounts, shop and online tables. It uses the same Firebase project and room protocol, so app and browser players can share tables. The website is unchanged and has no Flutter web build. See [`flutter/README.md`](flutter/README.md) for building it and the one-time `flutterfire configure` step.
+
 ## Files & tests
 
 ```
