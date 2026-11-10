@@ -1,6 +1,7 @@
 // Drives the real widget tree through the offline modes end to end.
 import 'package:chinese_cribbage/app/controller.dart';
 import 'package:chinese_cribbage/main.dart';
+import 'package:chinese_cribbage/screens/dialogs.dart' as dlg;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -130,5 +131,25 @@ void main() {
     expect(app.campaign.lives, 4);
     expect(find.textContaining('FAILED'), findsOneWidget);
     expect(find.text('Retry (1 ❤)'), findsOneWidget);
+  });
+
+  testWidgets('settings: privacy policy always, delete account only when signed in', (t) async {
+    await t.binding.setSurfaceSize(const Size(390, 844));
+    final app = App();
+    await t.pumpWidget(CribbageApp(app: app));
+    dlg.showSettings(app);
+    await pump(t);
+    expect(find.text('Privacy policy'), findsOneWidget);
+    expect(find.text('Delete account'), findsNothing);
+    dlg.close('settings');
+    app.uid = 'g1';
+    app.profile = {'name': 'Ann', 'provider': 'guest', 'friendCode': 'ABCDEF'};
+    dlg.showSettings(app);
+    await pump(t);
+    expect(find.text('Delete account'), findsOneWidget);
+    await t.tap(find.text('Delete account'));
+    await pump(t);
+    expect(find.text('Delete everything?'), findsOneWidget);
+    expect(find.textContaining('sign in again'), findsNothing); // guests skip re-auth
   });
 }

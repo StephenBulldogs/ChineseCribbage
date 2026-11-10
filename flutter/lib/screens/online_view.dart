@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 import '../app/controller.dart';
@@ -90,6 +91,25 @@ class _AuthPanelState extends State<_AuthPanel> {
           decoration: const InputDecoration(hintText: 'Display name (optional for guests)', counterText: '')),
       const SizedBox(height: 12),
       PrimaryButton('Continue with Google', onPressed: app.signInGoogle),
+      if (defaultTargetPlatform == TargetPlatform.iOS) ...[
+        const SizedBox(height: 10),
+        // Apple's style rules: black or white button with the Apple logo.
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: app.signInApple,
+            icon: const Icon(Icons.apple, size: 22),
+            label: const Text('Sign in with Apple'),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: Colors.black,
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+              shape: const StadiumBorder(),
+            ),
+          ),
+        ),
+      ],
       const SizedBox(height: 10),
       GhostButton('Play as guest', onPressed: () => app.signInGuest(_name.text)),
       ErrText(app.authError),
