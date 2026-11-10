@@ -52,39 +52,26 @@ flutter run            # pick an Android emulator/device or iOS simulator
 flutter test
 ```
 
-Offline modes work immediately. **Online play needs the one-time Firebase step below.**
-Until then, tapping *Online play* shows the setup notice, the same way the website
-does without a config.
+Offline and online play both work out of the box. The Android and iOS apps are
+registered in the `chinese-cribbage` Firebase project, and their config is in
+`lib/firebase_options.dart`, `android/app/google-services.json` and
+`ios/Runner/GoogleService-Info.plist`.
 
-## One-time Firebase setup (online play)
+## Google sign-in: remaining console steps
 
-The app uses the website's existing `chinese-cribbage` Firebase project. It just
-needs the Android and iOS apps registered in it:
+Guest play needs nothing more. Google sign-in uses the provider already enabled
+for the website, plus:
 
-```bash
-dart pub global activate flutterfire_cli
-```
+- **Android:** in Firebase console → Project settings → the Android app, add the
+  SHA-1 and SHA-256 of each signing key you use. For the debug key, run
+  `cd android && ./gradlew signingReport` (on Windows: `cd android` then `.\gradlew signingReport`).
+  Add the release key's fingerprints too before you publish.
+- **iOS:** the URL schemes the sign-in flow returns to are already in `ios/Runner/Info.plist`.
 
-```bash
-cd flutter && flutterfire configure --project=chinese-cribbage --platforms=android,ios
-```
+If you ever re-register the apps, update the values with
+`flutterfire configure --project=chinese-cribbage --platforms=android,ios`
+(this needs the Firebase CLI), or paste the new values in by hand.
 
-This registers the apps (Android package `com.chinesecribbage.chinese_cribbage`,
-iOS bundle `com.chinesecribbage.chineseCribbage`). It also overwrites
-`lib/firebase_options.dart` with real keys, and adds
-`android/app/google-services.json` and `ios/Runner/GoogleService-Info.plist`.
-Nothing else in the code changes.
-
-For **Google sign-in** (Authentication → Sign-in method → Google is already
-enabled for the website):
-
-- **Android:** in Firebase console → Project settings → your Android app, add the
-  SHA-1 and SHA-256 of your signing key. For the debug key, run
-  `cd android && ./gradlew signingReport`.
-- **iOS:** add the *Encoded App ID* from Project settings → your iOS app as a URL
-  scheme. In Xcode, that's Runner → Info → URL Types.
-
-Guest play needs no extra setup. Guests only use the Realtime Database, same as on the web.
 The database rules in the root README apply unchanged.
 
 ## Notes and differences from the web

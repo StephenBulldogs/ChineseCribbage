@@ -2,16 +2,10 @@
 // project the website uses, so app and browser players share rooms,
 // accounts, friends and leaderboards.
 //
-// ⚠️  The Android and iOS app IDs below are placeholders. Register the apps
-// in the Firebase console and regenerate this file with:
-//
-//     dart pub global activate flutterfire_cli
-//     flutterfire configure --project=chinese-cribbage --platforms=android,ios
-//
-// That overwrites this file with real values and drops
-// android/app/google-services.json + ios/Runner/GoogleService-Info.plist.
-// Until then the app runs fully offline, and the Online section shows the
-// one-time setup notice (exactly like the website does with no config).
+// Values come from the Android and iOS apps registered in the Firebase
+// console (android/app/google-services.json and
+// ios/Runner/GoogleService-Info.plist). Like the web apiKey in index.html,
+// these are public identifiers; security comes from the database rules.
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, TargetPlatform;
@@ -29,8 +23,8 @@ class DefaultFirebaseOptions {
   }
 
   static const android = FirebaseOptions(
-    apiKey: 'REPLACE_WITH_ANDROID_API_KEY',
-    appId: 'REPLACE_WITH_ANDROID_APP_ID',
+    apiKey: 'AIzaSyC3Pk5odlH9jgDB54cMNiMssDrfWEHyW2w',
+    appId: '1:726195341835:android:975d071c537a6aadc2150e',
     messagingSenderId: '726195341835',
     projectId: 'chinese-cribbage',
     databaseURL: 'https://chinese-cribbage-default-rtdb.firebaseio.com',
@@ -38,16 +32,17 @@ class DefaultFirebaseOptions {
   );
 
   static const ios = FirebaseOptions(
-    apiKey: 'REPLACE_WITH_IOS_API_KEY',
-    appId: 'REPLACE_WITH_IOS_APP_ID',
+    apiKey: 'AIzaSyBPhFKW24LEsy677Htz48Sbp6wZ89vIdRk',
+    appId: '1:726195341835:ios:33ee90d66a76556cc2150e',
     messagingSenderId: '726195341835',
     projectId: 'chinese-cribbage',
     databaseURL: 'https://chinese-cribbage-default-rtdb.firebaseio.com',
     storageBucket: 'chinese-cribbage.firebasestorage.app',
+    iosClientId: '726195341835-8a9v55c4rplu0p91ve5t4kfusuekgimk.apps.googleusercontent.com',
     iosBundleId: 'com.chinesecribbage.chineseCribbage',
   );
 
-  /// False while the placeholders above are still in place.
+  /// False if the values above are ever reset to placeholders.
   static bool get isConfigured {
     try {
       final o = currentPlatform;
